@@ -1,0 +1,374 @@
+import streamlit as st
+from dotenv import load_dotenv
+load_dotenv()
+
+from roles_skills import ROLES_SKILLS
+from roadmap_links import ROADMAP_LINKS
+from utils.resume_parser import extract_text
+from utils.ats_score import calculate_ats_score
+from utils.resource_retriever import get_resources
+
+# -----------------------------
+# PAGE CONFIG
+# -----------------------------
+st.set_page_config(page_title="SkillBridge AI", layout="centered")
+
+# -----------------------------
+# CUSTOM CSS (UI UPGRADE)
+# -----------------------------
+st.markdown("""
+<style>
+.block-container {
+    padding-top: 1.5rem;
+    padding-bottom: 2rem;
+    max-width: 900px;
+}
+
+/* Cleaner headings */
+h1, h2, h3 {
+    font-family: 'Segoe UI', sans-serif;
+}
+
+/* Card container */
+.section-card {
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 22px;
+    padding: 22px;
+    background: rgba(255,255,255,0.03);
+}
+
+/* Premium cards */
+.mode-card {
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 22px;
+    padding: 20px;
+    background: rgba(255,255,255,0.04);
+    transition: 0.2s ease-in-out;
+    min-height: 180px;
+}
+.mode-card:hover {
+    transform: translateY(-3px);
+    border: 1px solid rgba(255,255,255,0.25);
+    background: rgba(255,255,255,0.06);
+}
+
+/* Small label */
+.small-label {
+    opacity: 0.75;
+    font-size: 0.95rem;
+}
+
+/* Badge */
+.badge {
+    display: inline-block;
+    padding: 6px 10px;
+    border-radius: 999px;
+    font-size: 0.82rem;
+    border: 1px solid rgba(255,255,255,0.18);
+    opacity: 0.9;
+}
+
+/* Remove extra empty spacing */
+div[data-testid="stVerticalBlock"] > div:empty {
+    display: none;
+}
+</style>
+""", unsafe_allow_html=True)
+
+
+# -----------------------------
+# SESSION STATE
+# -----------------------------
+if "screen" not in st.session_state:
+    st.session_state.screen = "home"
+
+if "chat" not in st.session_state:
+    st.session_state.chat = []
+
+if "target_role" not in st.session_state:
+    st.session_state.target_role = None
+
+def add_assistant(msg):
+    st.session_state.chat.append({"role": "assistant", "content": msg})
+
+def add_user(msg):
+    st.session_state.chat.append({"role": "user", "content": msg})
+
+def reset_app():
+    st.session_state.screen = "home"
+    st.session_state.chat = []
+    st.session_state.target_role = None
+
+# -----------------------------
+# SIDEBAR (Modern)
+# -----------------------------
+with st.sidebar:
+    st.markdown("## 🔥 Phoenix")
+    st.markdown("### SkillBridge AI")
+
+    # ✅ Creator section
+    st.markdown("**Creator:**")
+    st.markdown("Krishna Tomar")
+    st.markdown("Avanish Pathak")
+
+    st.markdown("---")
+
+    st.markdown("**Modes Available:**")
+    st.markdown("- 🗺 Roadmap Generator")
+    st.markdown("- 🧠 SkillBridge Resume Analyzer")
+    st.markdown("---")
+
+    if st.button("🔄 Reset Assistant"):
+        reset_app()
+        st.rerun()
+
+# -----------------------------
+# HEADER
+# -----------------------------
+st.markdown("## 🔥 SkillBridge AI Assistant")
+st.markdown("<div class='small-label'>Your AI Career Guide for Roadmaps and Skill Gaps</div>", unsafe_allow_html=True)
+st.markdown("---")
+
+# -----------------------------
+# SHOW CHAT
+# -----------------------------
+for msg in st.session_state.chat:
+    with st.chat_message(msg["role"]):
+        st.markdown(msg["content"])
+
+# -----------------------------
+# HOME SCREEN
+# -----------------------------
+if st.session_state.screen == "home":
+    if len(st.session_state.chat) == 0:
+        add_assistant("Hi there! What do you want to do today?")
+
+    st.markdown("<div class='section-card'>", unsafe_allow_html=True)
+    st.markdown("### Choose an option")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.markdown("""
+        <div class="mode-card">
+            <div class="badge">Career Roadmap</div>
+            <h2 style="margin-top:12px;">🗺 Roadmap</h2>
+            <p style="opacity:0.8; font-size:0.95rem;">
+                Get a structured learning path based on your goal. 
+                Perfect if you want direction and clarity.
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+
+        if st.button("Start Roadmap", use_container_width=True):
+            add_user("I want Roadmap")
+            add_assistant("Great. Do you already know your job role?")
+            st.session_state.screen = "roadmap_choice"
+            st.rerun()
+
+    with col2:
+        st.markdown("""
+        <div class="mode-card">
+            <div class="badge">Skill Gap + ATS</div>
+            <h2 style="margin-top:12px;">🧠 SkillBridge</h2>
+            <p style="opacity:0.8; font-size:0.95rem;">
+                Upload your resume, get ATS score, identify missing skills, 
+                and receive a personalized improvement plan.
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+
+        if st.button("Start SkillBridge", use_container_width=True):
+            add_user("I want SkillBridge")
+            add_assistant("Awesome. What career role are you targeting?")
+            st.session_state.screen = "skillbridge_goal"
+            st.rerun()
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+# -----------------------------
+# ROADMAP MODE
+# -----------------------------
+elif st.session_state.screen == "roadmap_choice":
+    st.markdown("<div class='section-card'>", unsafe_allow_html=True)
+    st.markdown("### 🗺 Roadmap Mode")
+    st.write("Step 1/2: Choose how you want to proceed")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        if st.button("✅ I know my job role"):
+            add_user("I know my job role")
+            add_assistant("Select your job role below.")
+            st.session_state.screen = "roadmap_known"
+            st.rerun()
+
+    with col2:
+        if st.button("❓ I am uncertain"):
+            add_user("I am uncertain about job role")
+            add_assistant("No problem. Tell me your strong subjects and interests.")
+            st.session_state.screen = "roadmap_uncertain"
+            st.rerun()
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+elif st.session_state.screen == "roadmap_known":
+    st.markdown("<div class='section-card'>", unsafe_allow_html=True)
+    st.markdown("### 🗺 Roadmap Generator")
+    st.write("Step 2/2: Select your target role")
+
+    role = st.selectbox("Select Job Role", list(ROADMAP_LINKS.keys()))
+
+    if st.button("🚀 Generate Roadmap Link"):
+        add_user(f"My job role is {role}")
+        add_assistant(f"✅ Roadmap Link for **{role}**:\n\n{ROADMAP_LINKS[role]}")
+        add_assistant("Follow the roadmap step-by-step. You can also use SkillBridge to check your gaps.")
+        st.session_state.screen = "home"
+        st.rerun()
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+elif st.session_state.screen == "roadmap_uncertain":
+    st.markdown("<div class='section-card'>", unsafe_allow_html=True)
+    st.markdown("### ❓ Career Discovery")
+    st.write("Tell me your strengths and interests (I will suggest roles)")
+
+    subjects = st.multiselect(
+        "Strong Subjects",
+        ["Maths", "Physics", "Chemistry", "Computer Science", "Statistics", "English"]
+    )
+
+    interests = st.multiselect(
+        "Interests",
+        ["Web Development", "Data", "AI/ML", "Cybersecurity", "Cloud", "Design"]
+    )
+
+    st.info("For hackathon demo: This section can be upgraded with AI role prediction + top 3 suggestions.")
+
+    if st.button("🔍 Suggest Careers (Basic)"):
+        add_user(f"My strong subjects: {subjects}, interests: {interests}")
+        add_assistant("Here are some roles you can explore:")
+
+        # Basic mapping (fast + safe)
+        if "Web Development" in interests:
+            add_assistant("**Frontend Developer** → Good for UI + coding.")
+            add_assistant("**Full Stack Developer** → Frontend + Backend combined.")
+        if "Data" in interests or "AI/ML" in interests:
+            add_assistant("**Data Analyst** → Python + SQL + dashboards.")
+            add_assistant("**Data Scientist** → ML + statistics + advanced projects.")
+        if "Cybersecurity" in interests:
+            add_assistant("**Cybersecurity Analyst** → Networking + security fundamentals.")
+        if "Cloud" in interests:
+            add_assistant("**DevOps Engineer** → Linux + Docker + cloud deployment.")
+
+        add_assistant("Now choose one role from Roadmap Generator.")
+        st.session_state.screen = "roadmap_known"
+        st.rerun()
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+# -----------------------------
+# SKILLBRIDGE MODE
+# -----------------------------
+elif st.session_state.screen == "skillbridge_goal":
+    st.markdown("<div class='section-card'>", unsafe_allow_html=True)
+    st.markdown("### 🧠 SkillBridge")
+    st.write("Step 1/3: Choose your target career")
+
+    role = st.selectbox("Choose Target Career", list(ROLES_SKILLS.keys()))
+
+    if st.button("Next ➜"):
+        st.session_state.target_role = role
+        add_user(f"I want to become {role}")
+        add_assistant("Do you have a resume?")
+        st.session_state.screen = "skillbridge_resume_choice"
+        st.rerun()
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+elif st.session_state.screen == "skillbridge_resume_choice":
+    st.markdown("<div class='section-card'>", unsafe_allow_html=True)
+    st.markdown("### 📄 Resume Check")
+    st.write("Step 2/3: Select one option")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        if st.button("📄 Yes, I have a resume"):
+            add_user("Yes, I have a resume")
+            add_assistant("Upload your resume now.")
+            st.session_state.screen = "skillbridge_upload"
+            st.rerun()
+
+    with col2:
+        if st.button("❌ No, I don't have a resume"):
+            add_user("No, I don't have a resume")
+            add_assistant("No worries. Tell me your skills and projects.")
+            st.session_state.screen = "skillbridge_no_resume"
+            st.rerun()
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+elif st.session_state.screen == "skillbridge_upload":
+    st.markdown("<div class='section-card'>", unsafe_allow_html=True)
+    st.markdown("### 📄 Upload Resume")
+    st.write("Step 3/3: Upload resume to analyze ATS + gaps")
+
+    uploaded = st.file_uploader("Upload Resume", type=["pdf", "docx", "txt"])
+
+    if uploaded:
+        resume_text = extract_text(uploaded)
+
+        st.success("✅ Resume extracted successfully!")
+        st.text_area("Extracted Resume Text", resume_text, height=200)
+
+        role = st.session_state.target_role
+        role_skills = ROLES_SKILLS[role]
+
+        ats = calculate_ats_score(resume_text, role_skills)
+
+        st.subheader("📌 ATS Score")
+        st.progress(ats / 100)
+        st.write(f"Your ATS Score: **{ats}/100**")
+
+        st.subheader("❌ Missing Skills + Best Resources")
+        missing = [s for s in role_skills if s.lower() not in resume_text.lower()]
+
+        if missing:
+            for skill in missing:
+                st.markdown(f"### 🔴 {skill.title()}")
+                res = get_resources(skill)
+                if res:
+                    st.markdown(f"- 📘 **Course**: {res['course']}")
+                    st.markdown(f"- 🎥 **Video**: {res['video']}")
+                    st.markdown(f"- 🧠 **Practice**: {res['practice']}")
+                else:
+                    st.markdown("- ⚠️ No curated resource found yet.")
+        else:
+            st.success("You are already role-ready 🎉")
+
+        st.markdown("---")
+        if st.button("⬅ Back"):
+            st.session_state.screen = "skillbridge_resume_choice"
+            st.rerun()
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+elif st.session_state.screen == "skillbridge_no_resume":
+    st.markdown("<div class='section-card'>", unsafe_allow_html=True)
+    st.markdown("### 🧾 No Resume Mode")
+    st.write("Tell me your current skills + projects and I’ll guide you.")
+
+    skills = st.text_area("Your Skills (example: Python, SQL, Excel)")
+    projects = st.text_area("Your Projects (example: Attendance system, Portfolio website)")
+
+    if st.button("Generate Plan"):
+        add_user(f"My skills: {skills} | Projects: {projects}")
+        add_assistant("✅ Great! Here is your next action plan:")
+        add_assistant("1) Build 2 strong projects for your target role.")
+        add_assistant("2) Create a 1-page ATS resume.")
+        add_assistant("3) Upload resume again for ATS + skill gap analysis.")
+        st.session_state.screen = "home"
+        st.rerun()
+
+    st.markdown("</div>", unsafe_allow_html=True)
