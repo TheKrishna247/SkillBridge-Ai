@@ -8,6 +8,15 @@ from utils.resume_parser import extract_text
 from utils.ats_score import calculate_ats_score
 from utils.resource_retriever import get_resources
 
+from utils.agent import agent_decide
+
+
+if "chat" not in st.session_state:
+    st.session_state.chat = [
+        {"role": "assistant", "content": "Hi! I’m SkillBridge AI. Choose Roadmap or SkillBridge to begin."}
+    ]
+
+
 # -----------------------------
 # PAGE CONFIG
 # -----------------------------
@@ -18,33 +27,42 @@ st.set_page_config(page_title="SkillBridge AI", layout="centered")
 # -----------------------------
 st.markdown("""
 <style>
+/* Page layout */
 .block-container {
     padding-top: 1.5rem;
     padding-bottom: 2rem;
-    max-width: 900px;
+    max-width: 950px;
 }
 
-/* Cleaner headings */
+/* Typography */
 h1, h2, h3 {
     font-family: 'Segoe UI', sans-serif;
 }
 
-/* Card container */
-.section-card {
-    border: 1px solid rgba(255,255,255,0.12);
-    border-radius: 22px;
-    padding: 22px;
-    background: rgba(255,255,255,0.03);
+/* Small tagline */
+.small-label {
+    opacity: 0.75;
+    font-size: 0.95rem;
 }
 
-/* Premium cards */
+/* Header rectangle */
+.header-card {
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 22px;
+    padding: 26px;
+    background: rgba(255,255,255,0.03);
+    margin-top: 14px;
+    margin-bottom: 22px;
+}
+
+/* Premium mode cards */
 .mode-card {
     border: 1px solid rgba(255,255,255,0.12);
     border-radius: 22px;
-    padding: 20px;
+    padding: 22px;
     background: rgba(255,255,255,0.04);
     transition: 0.2s ease-in-out;
-    min-height: 180px;
+    min-height: 190px;
 }
 .mode-card:hover {
     transform: translateY(-3px);
@@ -52,28 +70,38 @@ h1, h2, h3 {
     background: rgba(255,255,255,0.06);
 }
 
-/* Small label */
-.small-label {
-    opacity: 0.75;
-    font-size: 0.95rem;
-}
-
-/* Badge */
+/* Badge style */
 .badge {
     display: inline-block;
-    padding: 6px 10px;
+    padding: 6px 12px;
     border-radius: 999px;
     font-size: 0.82rem;
     border: 1px solid rgba(255,255,255,0.18);
     opacity: 0.9;
 }
 
-/* Remove extra empty spacing */
+/* Remove random empty blocks */
 div[data-testid="stVerticalBlock"] > div:empty {
     display: none;
 }
+
+/* ==============================
+   Make the card action button blend in
+   ============================== */
+button[kind="secondary"] {
+    border-radius: 14px !important;
+    padding: 0.65rem 1rem !important;
+    font-weight: 600 !important;
+    border: 1px solid rgba(255,255,255,0.14) !important;
+    background: rgba(255,255,255,0.04) !important;
+}
+button[kind="secondary"]:hover {
+    background: rgba(255,255,255,0.07) !important;
+    border: 1px solid rgba(255,255,255,0.25) !important;
+}
 </style>
 """, unsafe_allow_html=True)
+
 
 
 # -----------------------------
@@ -141,10 +169,15 @@ for msg in st.session_state.chat:
 # -----------------------------
 if st.session_state.screen == "home":
     if len(st.session_state.chat) == 0:
-        add_assistant("Hi there! What do you want to do today?")
+        add_assistant("Hi! I’m SkillBridge AI. Choose Roadmap or SkillBridge to begin.")
 
-    st.markdown("<div class='section-card'>", unsafe_allow_html=True)
-    st.markdown("### Choose an option")
+    # ✅ Put text INSIDE the rectangle
+    st.markdown("""
+    <div class='header-card'>
+        <h2 style='text-align:center; margin:0;'>Choose an option</h2>
+        <p style='text-align:center; opacity:0.7; margin-top:6px;'>Select one to continue</p>
+    </div>
+    """, unsafe_allow_html=True)
 
     col1, col2 = st.columns(2)
 
@@ -154,17 +187,11 @@ if st.session_state.screen == "home":
             <div class="badge">Career Roadmap</div>
             <h2 style="margin-top:12px;">🗺 Roadmap</h2>
             <p style="opacity:0.8; font-size:0.95rem;">
-                Get a structured learning path based on your goal. 
+                Get a structured learning path based on your goal.
                 Perfect if you want direction and clarity.
             </p>
         </div>
         """, unsafe_allow_html=True)
-
-        if st.button("Start Roadmap", use_container_width=True):
-            add_user("I want Roadmap")
-            add_assistant("Great. Do you already know your job role?")
-            st.session_state.screen = "roadmap_choice"
-            st.rerun()
 
     with col2:
         st.markdown("""
@@ -172,19 +199,93 @@ if st.session_state.screen == "home":
             <div class="badge">Skill Gap + ATS</div>
             <h2 style="margin-top:12px;">🧠 SkillBridge</h2>
             <p style="opacity:0.8; font-size:0.95rem;">
-                Upload your resume, get ATS score, identify missing skills, 
+                Upload your resume, get ATS score, identify missing skills,
                 and receive a personalized improvement plan.
             </p>
         </div>
         """, unsafe_allow_html=True)
 
-        if st.button("Start SkillBridge", use_container_width=True):
-            add_user("I want SkillBridge")
-            add_assistant("Awesome. What career role are you targeting?")
+    # ✅ Chat section
+    st.markdown("---")
+
+    # ✅ Chat Title + Clear Chat button
+    colA, colB = st.columns([3, 1])
+
+    with colA:
+        st.markdown("### 💬 Chat Assistant")
+
+    with colB:
+        if st.button("🧹 Clear Chat", use_container_width=True):
+            st.session_state.chat = [
+                {"role": "assistant", "content": "Chat cleared. How can I help you now?"}
+            ]
+            st.rerun()
+
+    # ✅ Quick Replies
+    st.markdown("**Quick Replies:**")
+    q1, q2, q3, q4 = st.columns(4)
+
+    with q1:
+        if st.button("🗺 Roadmap", use_container_width=True):
+            st.session_state.chat.append({"role": "user", "content": "I want Roadmap"})
+            st.session_state.screen = "roadmap_choice"
+            st.rerun()
+
+    with q2:
+        if st.button("🧠 SkillBridge", use_container_width=True):
+            st.session_state.chat.append({"role": "user", "content": "I want SkillBridge"})
             st.session_state.screen = "skillbridge_goal"
             st.rerun()
 
-    st.markdown("</div>", unsafe_allow_html=True)
+    with q3:
+        if st.button("📄 Upload Resume", use_container_width=True):
+            st.session_state.chat.append({"role": "user", "content": "I have a resume"})
+            st.session_state.screen = "skillbridge_upload"
+            st.rerun()
+
+    with q4:
+        if st.button("🎯 Suggest Careers", use_container_width=True):
+            st.session_state.chat.append({"role": "user", "content": "I am uncertain about job role"})
+            st.session_state.screen = "roadmap_uncertain"
+            st.rerun()
+
+    # ✅ Chat messages
+    for msg in st.session_state.chat:
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
+
+    # ✅ Chat input
+    user_input = st.chat_input("Type here...")
+
+    if user_input:
+        st.session_state.chat.append({"role": "user", "content": user_input})
+
+        memory_text = "\n".join([f"{m['role']}: {m['content']}" for m in st.session_state.chat])
+        decision = agent_decide(user_input, memory_text)
+
+        if decision.get("next_question"):
+            st.session_state.chat.append({"role": "assistant", "content": decision["next_question"]})
+
+        if decision.get("final_answer"):
+            st.session_state.chat.append({"role": "assistant", "content": decision["final_answer"]})
+
+        st.rerun()
+
+
+    if user_input:
+        st.session_state.chat.append({"role": "user", "content": user_input})
+
+        memory_text = "\n".join([f"{m['role']}: {m['content']}" for m in st.session_state.chat])
+
+        decision = agent_decide(user_input, memory_text)
+
+        if decision.get("next_question"):
+            st.session_state.chat.append({"role": "assistant", "content": decision["next_question"]})
+
+        if decision.get("final_answer"):
+            st.session_state.chat.append({"role": "assistant", "content": decision["final_answer"]})
+
+        st.rerun()
 
 # -----------------------------
 # ROADMAP MODE
