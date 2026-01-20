@@ -22,30 +22,32 @@ if "chat" not in st.session_state:
 # -----------------------------
 st.set_page_config(page_title="SkillBridge AI", layout="centered")
 
+
 # -----------------------------
 # CUSTOM CSS (UI UPGRADE)
 # -----------------------------
 st.markdown("""
 <style>
-/* Page layout */
+
+/* =========================
+   GLOBAL UI (KEEP THIS)
+   ========================= */
+
 .block-container {
     padding-top: 1.5rem;
     padding-bottom: 2rem;
     max-width: 950px;
 }
 
-/* Typography */
 h1, h2, h3 {
     font-family: 'Segoe UI', sans-serif;
 }
 
-/* Small tagline */
 .small-label {
     opacity: 0.75;
     font-size: 0.95rem;
 }
 
-/* Header rectangle */
 .header-card {
     border: 1px solid rgba(255,255,255,0.12);
     border-radius: 22px;
@@ -55,7 +57,6 @@ h1, h2, h3 {
     margin-bottom: 22px;
 }
 
-/* Premium mode cards */
 .mode-card {
     border: 1px solid rgba(255,255,255,0.12);
     border-radius: 22px;
@@ -70,7 +71,6 @@ h1, h2, h3 {
     background: rgba(255,255,255,0.06);
 }
 
-/* Badge style */
 .badge {
     display: inline-block;
     padding: 6px 12px;
@@ -80,14 +80,6 @@ h1, h2, h3 {
     opacity: 0.9;
 }
 
-/* Remove random empty blocks */
-div[data-testid="stVerticalBlock"] > div:empty {
-    display: none;
-}
-
-/* ==============================
-   Make the card action button blend in
-   ============================== */
 button[kind="secondary"] {
     border-radius: 14px !important;
     padding: 0.65rem 1rem !important;
@@ -99,8 +91,56 @@ button[kind="secondary"]:hover {
     background: rgba(255,255,255,0.07) !important;
     border: 1px solid rgba(255,255,255,0.25) !important;
 }
+
+/* =========================
+   CHAT UI (ADD THIS)
+   ========================= */
+
+.chat-container {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.chat-row {
+    display: flex;
+    width: 100%;
+}
+
+.chat-user {
+    justify-content: flex-end;
+}
+
+.chat-ai {
+    justify-content: flex-start;
+}
+
+.chat-bubble {
+    max-width: 70%;
+    padding: 12px 14px;
+    border-radius: 16px;
+    line-height: 1.45;
+    word-wrap: break-word;
+}
+
+/* USER */
+.user-bubble {
+    background: #F4D7DE;
+    color: #2B1B1E;
+    border-radius: 16px 16px 16px 4px;
+    border: 1px solid #E8BFC9;
+}
+
+/* AI */
+.ai-bubble {
+    background: #E5E7EB;
+    color: #111827;
+    border-radius: 16px 16px 4px 16px;
+}
+
 </style>
 """, unsafe_allow_html=True)
+
 
 
 
@@ -157,12 +197,7 @@ st.markdown("## 🔥 SkillBridge AI Assistant")
 st.markdown("<div class='small-label'>Your AI Career Guide for Roadmaps and Skill Gaps</div>", unsafe_allow_html=True)
 st.markdown("---")
 
-# -----------------------------
-# SHOW CHAT
-# -----------------------------
-for msg in st.session_state.chat:
-    with st.chat_message(msg["role"]):
-        st.markdown(msg["content"])
+
 
 # -----------------------------
 # HOME SCREEN
@@ -249,10 +284,23 @@ if st.session_state.screen == "home":
             st.session_state.screen = "roadmap_uncertain"
             st.rerun()
 
-    # ✅ Chat messages
+    
+    
+    st.markdown("<div class='chat-container'>", unsafe_allow_html=True)
+
     for msg in st.session_state.chat:
-        with st.chat_message(msg["role"]):
-            st.markdown(msg["content"])
+        role_class = "chat-user" if msg["role"] == "user" else "chat-ai"
+        bubble_class = "user-bubble" if msg["role"] == "user" else "ai-bubble"
+
+        st.markdown(f"""
+            <div class="chat-row {role_class}">
+                <div class="chat-bubble {bubble_class}">
+                    {msg["content"]}
+                </div>
+            </div>
+        """, unsafe_allow_html=True)
+
+    st.markdown("</div>", unsafe_allow_html=True)
 
     # ✅ Chat input
     user_input = st.chat_input("Type here...")
@@ -272,20 +320,6 @@ if st.session_state.screen == "home":
         st.rerun()
 
 
-    if user_input:
-        st.session_state.chat.append({"role": "user", "content": user_input})
-
-        memory_text = "\n".join([f"{m['role']}: {m['content']}" for m in st.session_state.chat])
-
-        decision = agent_decide(user_input, memory_text)
-
-        if decision.get("next_question"):
-            st.session_state.chat.append({"role": "assistant", "content": decision["next_question"]})
-
-        if decision.get("final_answer"):
-            st.session_state.chat.append({"role": "assistant", "content": decision["final_answer"]})
-
-        st.rerun()
 
 # -----------------------------
 # ROADMAP MODE
