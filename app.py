@@ -127,7 +127,7 @@ button[kind="secondary"]:hover {
 .user-bubble {
     background: #F4D7DE;
     color: #2B1B1E;
-    border-radius: 16px 16px 16px 4px;
+    border-radius: 16px 16px 2px 16px;
     border: 1px solid #E8BFC9;
 }
 
@@ -135,8 +135,11 @@ button[kind="secondary"]:hover {
 .ai-bubble {
     background: #E5E7EB;
     color: #111827;
-    border-radius: 16px 16px 4px 16px;
+    border-radius: 16px 16px 16px 2px;
 }
+
+
+
 
 </style>
 """, unsafe_allow_html=True)
