@@ -301,7 +301,7 @@ if st.session_state.screen == "home":
 
     # ✅ Quick Replies
     st.markdown("**Quick Replies:**")
-    q1, q2, q3, q4 = st.columns(4)
+    q1, q2, q3 = st.columns(3)
 
     with q1:
         if st.button("🗺 Roadmap", use_container_width=True):
@@ -310,7 +310,6 @@ if st.session_state.screen == "home":
             st.session_state.agent_state["step"] = "ROADMAP_FLOW"
             st.rerun()
 
-
     with q2:
         if st.button("🧠 SkillBridge", use_container_width=True):
             st.session_state.chat.append({"role": "user", "content": "I want SkillBridge"})
@@ -318,21 +317,12 @@ if st.session_state.screen == "home":
             st.session_state.agent_state["step"] = "SKILLBRIDGE_FLOW"
             st.rerun()
 
-
     with q3:
         if st.button("📄 Upload Resume", use_container_width=True):
             st.session_state.chat.append({"role": "user", "content": "I have a resume"})
             st.session_state.agent_state["mode"] = "skillbridge"
             st.session_state.agent_state["resume_needed"] = True
             st.session_state.agent_state["step"] = "WAITING_FOR_RESUME_UPLOAD"
-            st.rerun()
-
-
-    with q4:
-        if st.button("🎯 Suggest Careers", use_container_width=True):
-            st.session_state.chat.append({"role": "user", "content": "I am uncertain about job role"})
-            st.session_state.agent_state["mode"] = "roadmap"
-            st.session_state.agent_state["step"] = "ROADMAP_FLOW"
             st.rerun()
 
     st.markdown("<div class='chat-container'>", unsafe_allow_html=True)
