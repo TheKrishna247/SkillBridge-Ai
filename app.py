@@ -7,12 +7,15 @@ load_dotenv()
 # -----------------------------
 st.set_page_config(page_title="SkillBridge AI", layout="centered")
 
+# Add to your imports at the top
+from utils.career_suggester import suggest_careers_llm
+
 from roles_skills import ROLES_SKILLS
 from roadmap_links import ROADMAP_LINKS
 from utils.resume_parser import extract_text
 from utils.ats_score import calculate_ats_score
 from utils.resource_retriever import get_resources
-from utils.agent import agent_decide
+from utils.agent import get_agent_response  # Using new agent
 from utils.internet_search import search_web
 
 # -----------------------------
@@ -153,21 +156,8 @@ button[kind="secondary"]:hover {
 if "screen" not in st.session_state:
     st.session_state.screen = "home"
 
-if "chat" not in st.session_state:
-    st.session_state.chat = []
-
 if "target_role" not in st.session_state:
     st.session_state.target_role = None
-
-# -----------------------------
-# QUESTION LIMIT CONTROL (NEW)
-# -----------------------------
-if "question_count" not in st.session_state:
-    st.session_state.question_count = 0
-
-if "max_questions" not in st.session_state:
-    st.session_state.max_questions = 5  # set 3/4/5
-
 
 # -----------------------------
 # AGENT STATE (NEW)
@@ -175,19 +165,24 @@ if "max_questions" not in st.session_state:
 if "agent_state" not in st.session_state:
     st.session_state.agent_state = {
         "step": "START",
-        "mode": None,            # "roadmap" or "skillbridge"
-        "target_role": None,     # selected career role
-        "resume_needed": None    # True / False
+        "resume_needed": None,
+
+        "question_count": 0,
+        "max_questions": 4,   # you can set 3/4/5
+        "mode": "roadmap",
+        "target_role": None,
+        "experience": None,
+        "time_per_day": None,
+        "goal_timeline": None
     }
+
+
 
 def add_assistant(msg):
     st.session_state.chat.append({"role": "assistant", "content": msg})
 
 def add_user(msg):
     st.session_state.chat.append({"role": "user", "content": msg})
-
-def question_limit_reached():
-    return st.session_state.question_count >= st.session_state.max_questions
 
 def reset_app():
     st.session_state.screen = "home"
@@ -202,14 +197,17 @@ def reset_app():
 
     # reset agent state
     st.session_state.agent_state = {
-        "step": "START",
-        "mode": None,
-        "target_role": None,
-        "resume_needed": None
-    }
+    "step": "START",
+    "resume_needed": None,
 
-    # reset question limit counter (NEW)
-    st.session_state.question_count = 0
+    "question_count": 0,
+    "max_questions": 4,
+    "mode": "roadmap",
+    "target_role": None,
+    "experience": None,
+    "time_per_day": None,
+    "goal_timeline": None
+}
 
 
 # -----------------------------
@@ -337,9 +335,6 @@ if st.session_state.screen == "home":
             st.session_state.agent_state["step"] = "ROADMAP_FLOW"
             st.rerun()
 
-
-    
-    
     st.markdown("<div class='chat-container'>", unsafe_allow_html=True)
 
     for msg in st.session_state.chat:
@@ -355,262 +350,230 @@ if st.session_state.screen == "home":
         """, unsafe_allow_html=True)
 
     st.markdown("</div>", unsafe_allow_html=True)
+    if "show_resume_uploader" not in st.session_state:
+        st.session_state.show_resume_uploader = False
+
+    if "skill_input_mode" not in st.session_state:
+        st.session_state.skill_input_mode = False
+
+    if "current_skill_step" not in st.session_state:
+        st.session_state.current_skill_step = "enter_skill"
+
+    if "temp_skill" not in st.session_state:
+        st.session_state.temp_skill = ""
+    # ============ END OF ADDITION ============
 
     # ✅ Chat input
-    user_input = st.chat_input("Type here...")
-
-    if user_input:
-        # store user message
-        st.session_state.chat.append({"role": "user", "content": user_input})
-
-        # build memory text for agent
-        memory_text = "\n".join([f"{m['role']}: {m['content']}" for m in st.session_state.chat])
-
-        # call agent with state
-        decision = agent_decide(user_input, memory_text, st.session_state.agent_state)
-
-        # update state from agent response
-        updates = decision.get("updates", {})
-        for k, v in updates.items():
-            if v is not None:
-                st.session_state.agent_state[k] = v
-
-        # update current step
-        st.session_state.agent_state["step"] = decision.get(
-            "next_step",
-            st.session_state.agent_state["step"]
-        )
-
-        # store assistant message
-        assistant_msg = decision.get("assistant_message", "Okay.")
-        hints = decision.get("answer_hints", [])
-        if hints:
-            assistant_msg += "\n\nHint options:\n" + "\n".join([f"• {h}" for h in hints])
-
-        if decision.get("next_step") == "ASK":
-            st.session_state.agent_state["question_count"] += 1
+    # ✅ Chat input section
 
 
-        st.session_state.chat.append({"role": "assistant", "content": assistant_msg})
-
-        # -----------------------------
-        # STEP 5: WEB SEARCH TOOL CALL
-        # -----------------------------
-        if decision.get("should_web_search") and decision.get("web_search_query"):
-            query = decision["web_search_query"]
-
-            st.session_state.chat.append({
-                "role": "assistant",
-                "content": f"🔎 Searching the web for: {query}"
-            })
-
-
-            results = search_web(query, max_results=5)
-
-            if results:
-                formatted_results = ""
-                for i, r in enumerate(results, 1):
-                    formatted_results += (
-                        f"{i}) {r['title']}\n"
-                        f"{r['url']}\n"
-                        f"{r['snippet']}\n\n"
-                    )
-
+user_input = st.chat_input("Type here...")
+if user_input:
+    # Store user message
+    st.session_state.chat.append({"role": "user", "content": user_input})
+    
+    # Get response from enhanced agent
+    agent_response = get_agent_response(user_input)
+    
+    if agent_response:
+        response_text = agent_response.get("response", "")
+        action = agent_response.get("action", "")
+        next_question = agent_response.get("next_question", "")
+        options = agent_response.get("options", [])
+        
+        # Add assistant response to chat
+        if response_text:
+            st.session_state.chat.append({"role": "assistant", "content": response_text})
+        
+        # Handle different actions
+        if action == "upload_resume":
+            # Set flag to show resume uploader in next render
+            st.session_state.show_resume_uploader = True
+            
+        elif action == "generate_roadmap":
+            # Generate roadmap for target role
+            target_role = st.session_state.agent_state.get("target_role", "Developer")
+            
+            # Import roadmap generator
+            from utils.roadmap_generator import generate_roadmap_mermaid
+            
+            roadmap = generate_roadmap_mermaid(target_role)
+            if roadmap:
                 st.session_state.chat.append({
-                    "role": "assistant",
-                    "content": "✅ Here are the top web results:\n\n" + formatted_results
+                    "role": "assistant", 
+                    "content": f"## 🗺️ Roadmap for {target_role}\n\n{roadmap}\n\n**Next Steps:**\n1. Follow the roadmap step by step\n2. Use SkillBridge to check your progress\n3. Build projects for each skill"
                 })
             else:
                 st.session_state.chat.append({
-                    "role": "assistant",
-                    "content": "⚠️ I tried searching, but I couldn’t fetch results right now."
+                    "role": "assistant", 
+                    "content": f"📚 **Learning Resources for {target_role}:**\n\n1. YouTube tutorials\n2. FreeCodeCamp\n3. Coursera/Udemy courses\n4. Build 2-3 projects\n5. Contribute to open source"
                 })
-
-        st.rerun()
-
-# -----------------------------
-# ROADMAP MODE
-# -----------------------------
-elif st.session_state.screen == "roadmap_choice":
-    st.markdown("<div class='section-card'>", unsafe_allow_html=True)
-    st.markdown("### 🗺 Roadmap Mode")
-    st.write("Step 1/2: Choose how you want to proceed")
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-        if st.button("✅ I know my job role"):
-            add_user("I know my job role")
-            add_assistant("Select your job role below.")
-            st.session_state.screen = "roadmap_known"
-            st.rerun()
-
-    with col2:
-        if st.button("❓ I am uncertain"):
-            add_user("I am uncertain about job role")
-            add_assistant("No problem. Tell me your strong subjects and interests.")
-            st.session_state.screen = "roadmap_uncertain"
-            st.rerun()
-
-    st.markdown("</div>", unsafe_allow_html=True)
-
-elif st.session_state.screen == "roadmap_known":
-    st.markdown("<div class='section-card'>", unsafe_allow_html=True)
-    st.markdown("### 🗺 Roadmap Generator")
-    st.write("Step 2/2: Select your target role")
-
-    role = st.selectbox("Select Job Role", list(ROADMAP_LINKS.keys()))
-
-    if st.button("🚀 Generate Roadmap Link"):
-        add_user(f"My job role is {role}")
-        add_assistant(f"✅ Roadmap Link for **{role}**:\n\n{ROADMAP_LINKS[role]}")
-        add_assistant("Follow the roadmap step-by-step. You can also use SkillBridge to check your gaps.")
-        st.session_state.screen = "home"
-        st.rerun()
-
-    st.markdown("</div>", unsafe_allow_html=True)
-
-elif st.session_state.screen == "roadmap_uncertain":
-    st.markdown("<div class='section-card'>", unsafe_allow_html=True)
-    st.markdown("### ❓ Career Discovery")
-    st.write("Tell me your strengths and interests (I will suggest roles)")
-
-    subjects = st.multiselect(
-        "Strong Subjects",
-        ["Maths", "Physics", "Chemistry", "Computer Science", "Statistics", "English"]
-    )
-
-    interests = st.multiselect(
-        "Interests",
-        ["Web Development", "Data", "AI/ML", "Cybersecurity", "Cloud", "Design"]
-    )
-
-    st.info("For hackathon demo: This section can be upgraded with AI role prediction + top 3 suggestions.")
-
-    if st.button("🔍 Suggest Careers (Basic)"):
-        add_user(f"My strong subjects: {subjects}, interests: {interests}")
-        add_assistant("Here are some roles you can explore:")
-
-        # Basic mapping (fast + safe)
-        if "Web Development" in interests:
-            add_assistant("**Frontend Developer** → Good for UI + coding.")
-            add_assistant("**Full Stack Developer** → Frontend + Backend combined.")
-        if "Data" in interests or "AI/ML" in interests:
-            add_assistant("**Data Analyst** → Python + SQL + dashboards.")
-            add_assistant("**Data Scientist** → ML + statistics + advanced projects.")
-        if "Cybersecurity" in interests:
-            add_assistant("**Cybersecurity Analyst** → Networking + security fundamentals.")
-        if "Cloud" in interests:
-            add_assistant("**DevOps Engineer** → Linux + Docker + cloud deployment.")
-
-        add_assistant("Now choose one role from Roadmap Generator.")
-        st.session_state.screen = "roadmap_known"
-        st.rerun()
-
-    st.markdown("</div>", unsafe_allow_html=True)
-
-# -----------------------------
-# SKILLBRIDGE MODE
-# -----------------------------
-elif st.session_state.screen == "skillbridge_goal":
-    st.markdown("<div class='section-card'>", unsafe_allow_html=True)
-    st.markdown("### 🧠 SkillBridge")
-    st.write("Step 1/3: Choose your target career")
-
-    role = st.selectbox("Choose Target Career", list(ROLES_SKILLS.keys()))
-
-    if st.button("Next ➜"):
-        st.session_state.target_role = role
-        add_user(f"I want to become {role}")
-        add_assistant("Do you have a resume?")
-        st.session_state.screen = "skillbridge_resume_choice"
-        st.rerun()
-
-    st.markdown("</div>", unsafe_allow_html=True)
-
-elif st.session_state.screen == "skillbridge_resume_choice":
-    st.markdown("<div class='section-card'>", unsafe_allow_html=True)
-    st.markdown("### 📄 Resume Check")
-    st.write("Step 2/3: Select one option")
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-        if st.button("📄 Yes, I have a resume"):
-            add_user("Yes, I have a resume")
-            add_assistant("Upload your resume now.")
-            st.session_state.screen = "skillbridge_upload"
-            st.rerun()
-
-    with col2:
-        if st.button("❌ No, I don't have a resume"):
-            add_user("No, I don't have a resume")
-            add_assistant("No worries. Tell me your skills and projects.")
-            st.session_state.screen = "skillbridge_no_resume"
-            st.rerun()
-
-    st.markdown("</div>", unsafe_allow_html=True)
-
-elif st.session_state.screen == "skillbridge_upload":
-    st.markdown("<div class='section-card'>", unsafe_allow_html=True)
-    st.markdown("### 📄 Upload Resume")
-    st.write("Step 3/3: Upload resume to analyze ATS + gaps")
-
-    uploaded = st.file_uploader("Upload Resume", type=["pdf", "docx", "txt"])
-
-    if uploaded:
-        resume_text = extract_text(uploaded)
-
-        st.success("✅ Resume extracted successfully!")
-        st.text_area("Extracted Resume Text", resume_text, height=200)
-
-        role = st.session_state.target_role
-        role_skills = ROLES_SKILLS[role]
-
-        ats = calculate_ats_score(resume_text, role_skills)
-
-        st.subheader("📌 ATS Score")
-        st.progress(ats / 100)
-        st.write(f"Your ATS Score: **{ats}/100**")
-
-        st.subheader("❌ Missing Skills + Best Resources")
-        missing = [s for s in role_skills if s.lower() not in resume_text.lower()]
-
-        if missing:
-            for skill in missing:
-                st.markdown(f"### 🔴 {skill.title()}")
-                res = get_resources(skill)
-                if res:
-                    st.markdown(f"- 📘 **Course**: {res['course']}")
-                    st.markdown(f"- 🎥 **Video**: {res['video']}")
-                    st.markdown(f"- 🧠 **Practice**: {res['practice']}")
+            
+            # Offer to continue to SkillBridge
+            st.session_state.chat.append({
+                "role": "assistant",
+                "content": "Would you like to analyze your skills with SkillBridge? (Yes/No)"
+            })
+            
+        elif action == "suggest_careers":
+            # Use LLM to suggest careers based on collected data
+            from utils.grokai_helper import recommend_careers
+            
+            # Get user data from agent state
+            interests = st.session_state.agent_state.get("interests", "")
+            subjects = st.session_state.agent_state.get("strong_subjects", "")
+            
+            if interests or subjects:
+                careers_data = recommend_careers(subjects, interests)
+                if careers_data and "careers" in careers_data:
+                    career_text = "## 🎯 Suggested Career Options:\n\n"
+                    for i, career in enumerate(careers_data["careers"], 1):
+                        career_text += f"{i}. **{career.get('role', 'Role')}**\n"
+                        career_text += f"   - {career.get('reason', 'Suitable based on your profile')}\n\n"
+                    
+                    career_text += "\n**Choose one to view the roadmap!**"
+                    st.session_state.chat.append({"role": "assistant", "content": career_text})
                 else:
-                    st.markdown("- ⚠️ No curated resource found yet.")
-        else:
-            st.success("You are already role-ready 🎉")
+                    st.session_state.chat.append({
+                        "role": "assistant", 
+                        "content": "Based on your profile, consider:\n1. **Data Analyst** - Good with numbers\n2. **Web Developer** - Creative + technical\n3. **Digital Marketer** - Communication skills"
+                    })
+        
+        elif action == "ask_skill":
+            # Manual skill input mode
+            st.session_state.skill_input_mode = True
+            st.session_state.current_skill_step = "enter_skill"
+            
+        # Update agent state with any updates
+        updates = agent_response.get("update_state", {})
+        for key, value in updates.items():
+            if value is not None:
+                st.session_state.agent_state[key] = value
+        
+        # Show options if available
+        if options and next_question:
+            options_text = "\n".join([f"- {opt}" for opt in options])
+            st.session_state.chat.append({
+                "role": "assistant",
+                "content": f"{next_question}\n\n{options_text}"
+            })
+    
+    st.rerun()
 
-        st.markdown("---")
-        if st.button("⬅ Back"):
-            st.session_state.screen = "skillbridge_resume_choice"
+# ✅ Resume Uploader (if triggered)
+if st.session_state.get("show_resume_uploader", False):
+    st.markdown("### 📄 Upload Your Resume")
+    
+    uploaded_file = st.file_uploader(
+        "Choose a file", 
+        type=["pdf", "docx", "txt", "png", "jpg", "jpeg"],
+        key="resume_uploader"
+    )
+    
+    if uploaded_file:
+        # Extract text from resume
+        from utils.resume_parser import extract_text
+        resume_text = extract_text(uploaded_file)
+        
+        if resume_text and len(resume_text) > 50:
+            st.session_state.agent_state["resume_text"] = resume_text
+            st.session_state.agent_state["has_resume"] = True
+            
+            # Calculate ATS score
+            target_role = st.session_state.agent_state.get("target_role")
+            from utils.ats_score import calculate_ats_score
+            
+            ats_result = calculate_ats_score(resume_text, target_role)
+            
+            # Show results
+            st.success(f"✅ Resume uploaded successfully!")
+            st.metric("ATS Score", f"{ats_result['score']}/100", ats_result['grade'])
+            
+            # Show suggestions
+            if ats_result.get("suggestions"):
+                st.warning("**Improvement Suggestions:**")
+                for suggestion in ats_result["suggestions"]:
+                    st.write(f"- {suggestion}")
+            
+            # Extract skills
+            from utils.resume_parser import extract_skills_from_text
+            skills = extract_skills_from_text(resume_text)
+            
+            if skills:
+                st.info(f"**Skills detected:** {', '.join(skills)}")
+                st.session_state.agent_state["detected_skills"] = skills
+                
+                # Ask for proficiency
+                st.session_state.chat.append({
+                    "role": "assistant",
+                    "content": f"I detected these skills in your resume: {', '.join(skills)}\n\nPlease rate your proficiency for each (Beginner/Intermediate/Advanced):"
+                })
+            
+            # Reset uploader flag
+            st.session_state.show_resume_uploader = False
             st.rerun()
-
-    st.markdown("</div>", unsafe_allow_html=True)
-
-elif st.session_state.screen == "skillbridge_no_resume":
-    st.markdown("<div class='section-card'>", unsafe_allow_html=True)
-    st.markdown("### 🧾 No Resume Mode")
-    st.write("Tell me your current skills + projects and I’ll guide you.")
-
-    skills = st.text_area("Your Skills (example: Python, SQL, Excel)")
-    projects = st.text_area("Your Projects (example: Attendance system, Portfolio website)")
-
-    if st.button("Generate Plan"):
-        add_user(f"My skills: {skills} | Projects: {projects}")
-        add_assistant("✅ Great! Here is your next action plan:")
-        add_assistant("1) Build 2 strong projects for your target role.")
-        add_assistant("2) Create a 1-page ATS resume.")
-        add_assistant("3) Upload resume again for ATS + skill gap analysis.")
-        st.session_state.screen = "home"
+    
+    # Cancel button
+    if st.button("Cancel Upload"):
+        st.session_state.show_resume_uploader = False
+        st.session_state.chat.append({
+            "role": "assistant",
+            "content": "Resume upload cancelled. How else can I help you?"
+        })
         st.rerun()
 
-    st.markdown("</div>", unsafe_allow_html=True)
+# ✅ Manual Skill Input (if triggered)
+if st.session_state.get("skill_input_mode", False):
+    st.markdown("### 🧠 Manual Skill Input")
+    
+    current_step = st.session_state.get("current_skill_step", "enter_skill")
+    
+    if current_step == "enter_skill":
+        skill = st.text_input("Enter a skill (e.g., Python, React, SQL):")
+        
+        if skill:
+            st.session_state.temp_skill = skill
+            st.session_state.current_skill_step = "enter_proficiency"
+            st.rerun()
+    
+    elif current_step == "enter_proficiency":
+        skill = st.session_state.get("temp_skill", "Unknown Skill")
+        proficiency = st.selectbox(
+            f"Proficiency level for {skill}:",
+            ["Beginner", "Intermediate", "Advanced"]
+        )
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("Add Skill"):
+                # Add to agent state
+                if "skills" not in st.session_state.agent_state:
+                    st.session_state.agent_state["skills"] = {}
+                
+                st.session_state.agent_state["skills"][skill] = proficiency
+                
+                st.session_state.chat.append({
+                    "role": "assistant",
+                    "content": f"Added: {skill} ({proficiency})"
+                })
+                
+                # Ask if more skills
+                st.session_state.chat.append({
+                    "role": "assistant",
+                    "content": "Add another skill? (Yes/No)"
+                })
+                
+                # Reset
+                st.session_state.skill_input_mode = False
+                st.rerun()
+        
+        with col2:
+            if st.button("Cancel"):
+                st.session_state.skill_input_mode = False
+                st.session_state.chat.append({
+                    "role": "assistant",
+                    "content": "Skill input cancelled."
+                })
+                st.rerun()
+
+
