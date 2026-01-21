@@ -2,26 +2,26 @@ import streamlit as st
 from dotenv import load_dotenv
 load_dotenv()
 
+# -----------------------------
+# PAGE CONFIG (MUST BE FIRST STREAMLIT COMMAND)
+# -----------------------------
+st.set_page_config(page_title="SkillBridge AI", layout="centered")
+
 from roles_skills import ROLES_SKILLS
 from roadmap_links import ROADMAP_LINKS
 from utils.resume_parser import extract_text
 from utils.ats_score import calculate_ats_score
 from utils.resource_retriever import get_resources
-
 from utils.agent import agent_decide
+from utils.internet_search import search_web
 
-
+# -----------------------------
+# CHAT INIT (AFTER PAGE CONFIG)
+# -----------------------------
 if "chat" not in st.session_state:
     st.session_state.chat = [
         {"role": "assistant", "content": "Hi! I’m SkillBridge AI. Choose Roadmap or SkillBridge to begin."}
     ]
-
-
-# -----------------------------
-# PAGE CONFIG
-# -----------------------------
-st.set_page_config(page_title="SkillBridge AI", layout="centered")
-
 
 # -----------------------------
 # CUSTOM CSS (UI UPGRADE)
@@ -159,16 +159,58 @@ if "chat" not in st.session_state:
 if "target_role" not in st.session_state:
     st.session_state.target_role = None
 
+# -----------------------------
+# QUESTION LIMIT CONTROL (NEW)
+# -----------------------------
+if "question_count" not in st.session_state:
+    st.session_state.question_count = 0
+
+if "max_questions" not in st.session_state:
+    st.session_state.max_questions = 5  # set 3/4/5
+
+
+# -----------------------------
+# AGENT STATE (NEW)
+# -----------------------------
+if "agent_state" not in st.session_state:
+    st.session_state.agent_state = {
+        "step": "START",
+        "mode": None,            # "roadmap" or "skillbridge"
+        "target_role": None,     # selected career role
+        "resume_needed": None    # True / False
+    }
+
 def add_assistant(msg):
     st.session_state.chat.append({"role": "assistant", "content": msg})
 
 def add_user(msg):
     st.session_state.chat.append({"role": "user", "content": msg})
 
+def question_limit_reached():
+    return st.session_state.question_count >= st.session_state.max_questions
+
 def reset_app():
     st.session_state.screen = "home"
-    st.session_state.chat = []
+
+    # reset chat to default welcome message
+    st.session_state.chat = [
+        {"role": "assistant", "content": "Hi! I’m SkillBridge AI. Choose Roadmap or SkillBridge to begin."}
+    ]
+
+    # reset old UI role
     st.session_state.target_role = None
+
+    # reset agent state
+    st.session_state.agent_state = {
+        "step": "START",
+        "mode": None,
+        "target_role": None,
+        "resume_needed": None
+    }
+
+    # reset question limit counter (NEW)
+    st.session_state.question_count = 0
+
 
 # -----------------------------
 # SIDEBAR (Modern)
@@ -266,26 +308,35 @@ if st.session_state.screen == "home":
     with q1:
         if st.button("🗺 Roadmap", use_container_width=True):
             st.session_state.chat.append({"role": "user", "content": "I want Roadmap"})
-            st.session_state.screen = "roadmap_choice"
+            st.session_state.agent_state["mode"] = "roadmap"
+            st.session_state.agent_state["step"] = "ROADMAP_FLOW"
             st.rerun()
+
 
     with q2:
         if st.button("🧠 SkillBridge", use_container_width=True):
             st.session_state.chat.append({"role": "user", "content": "I want SkillBridge"})
-            st.session_state.screen = "skillbridge_goal"
+            st.session_state.agent_state["mode"] = "skillbridge"
+            st.session_state.agent_state["step"] = "SKILLBRIDGE_FLOW"
             st.rerun()
+
 
     with q3:
         if st.button("📄 Upload Resume", use_container_width=True):
             st.session_state.chat.append({"role": "user", "content": "I have a resume"})
-            st.session_state.screen = "skillbridge_upload"
+            st.session_state.agent_state["mode"] = "skillbridge"
+            st.session_state.agent_state["resume_needed"] = True
+            st.session_state.agent_state["step"] = "WAITING_FOR_RESUME_UPLOAD"
             st.rerun()
+
 
     with q4:
         if st.button("🎯 Suggest Careers", use_container_width=True):
             st.session_state.chat.append({"role": "user", "content": "I am uncertain about job role"})
-            st.session_state.screen = "roadmap_uncertain"
+            st.session_state.agent_state["mode"] = "roadmap"
+            st.session_state.agent_state["step"] = "ROADMAP_FLOW"
             st.rerun()
+
 
     
     
@@ -309,20 +360,73 @@ if st.session_state.screen == "home":
     user_input = st.chat_input("Type here...")
 
     if user_input:
+        # store user message
         st.session_state.chat.append({"role": "user", "content": user_input})
 
+        # build memory text for agent
         memory_text = "\n".join([f"{m['role']}: {m['content']}" for m in st.session_state.chat])
-        decision = agent_decide(user_input, memory_text)
 
-        if decision.get("next_question"):
-            st.session_state.chat.append({"role": "assistant", "content": decision["next_question"]})
+        # call agent with state
+        decision = agent_decide(user_input, memory_text, st.session_state.agent_state)
 
-        if decision.get("final_answer"):
-            st.session_state.chat.append({"role": "assistant", "content": decision["final_answer"]})
+        # update state from agent response
+        updates = decision.get("updates", {})
+        for k, v in updates.items():
+            if v is not None:
+                st.session_state.agent_state[k] = v
+
+        # update current step
+        st.session_state.agent_state["step"] = decision.get(
+            "next_step",
+            st.session_state.agent_state["step"]
+        )
+
+        # store assistant message
+        assistant_msg = decision.get("assistant_message", "Okay.")
+        hints = decision.get("answer_hints", [])
+        if hints:
+            assistant_msg += "\n\nHint options:\n" + "\n".join([f"• {h}" for h in hints])
+
+        if decision.get("next_step") == "ASK":
+            st.session_state.agent_state["question_count"] += 1
+
+
+        st.session_state.chat.append({"role": "assistant", "content": assistant_msg})
+
+        # -----------------------------
+        # STEP 5: WEB SEARCH TOOL CALL
+        # -----------------------------
+        if decision.get("should_web_search") and decision.get("web_search_query"):
+            query = decision["web_search_query"]
+
+            st.session_state.chat.append({
+                "role": "assistant",
+                "content": f"🔎 Searching the web for: {query}"
+            })
+
+
+            results = search_web(query, max_results=5)
+
+            if results:
+                formatted_results = ""
+                for i, r in enumerate(results, 1):
+                    formatted_results += (
+                        f"{i}) {r['title']}\n"
+                        f"{r['url']}\n"
+                        f"{r['snippet']}\n\n"
+                    )
+
+                st.session_state.chat.append({
+                    "role": "assistant",
+                    "content": "✅ Here are the top web results:\n\n" + formatted_results
+                })
+            else:
+                st.session_state.chat.append({
+                    "role": "assistant",
+                    "content": "⚠️ I tried searching, but I couldn’t fetch results right now."
+                })
 
         st.rerun()
-
-
 
 # -----------------------------
 # ROADMAP MODE
