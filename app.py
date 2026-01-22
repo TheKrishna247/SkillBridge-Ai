@@ -15,6 +15,11 @@ from utils.ats_detailed import get_detailed_ats_analysis
 from utils.resource_retriever import get_resources
 from utils.agent import get_agent_response, agent  # Using new agent
 from utils.internet_search import search_web
+from utils.dynamic_career_agent import (
+    create_initial_state,
+    run_career_discovery
+)
+
 import re
 
 def clean_text(text):
@@ -436,7 +441,17 @@ user_input = st.chat_input("Type here...")
 if user_input:
     # Store user message
     st.session_state.chat.append({"role": "user", "content": user_input})
-    
+    # =============================
+    # Career Discovery Trigger
+    # =============================
+    if user_input.lower() in ["career discovery", "discover career", "career help"]:
+        st.session_state.agent_state = create_initial_state()
+        st.session_state.chat.append({
+            "role": "assistant",
+            "content": "Great! Let’s figure out the best career path for you.\n\nWhat kind of work do you enjoy doing?"
+        })
+        st.rerun()
+
     # Check if user is selecting a career from suggestions
     suggested_careers = st.session_state.agent_state.get("suggested_careers", [])
     if suggested_careers and user_input in suggested_careers:
@@ -471,7 +486,25 @@ if user_input:
                 "content": f"Great! Let's analyze your skills for **{target_role}**.\n\n**Do you have a resume?**"
             })
             st.rerun()
-    
+    # =============================
+    # Career Discovery Mode Handler
+    # =============================
+    if st.session_state.agent_state.get("mode") == "career_discovery":
+
+        reply, st.session_state.agent_state = run_career_discovery(
+            user_input,
+            st.session_state.agent_state
+        )
+
+        if reply:
+            st.session_state.chat.append({
+                "role": "assistant",
+                "content": reply
+            })
+
+        # Stop here – do NOT let old agent logic run
+        st.rerun()
+
     # Get response from enhanced agent (sync with session state)
     agent_response = get_agent_response(user_input, st.session_state.agent_state)
     
