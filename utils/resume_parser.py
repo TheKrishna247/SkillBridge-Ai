@@ -1,8 +1,8 @@
 import pdfplumber
+import io
 import docx
 import pytesseract
 from PIL import Image
-import io
 import re
 
 def extract_text_from_pdf(file):
@@ -21,10 +21,25 @@ def extract_text_from_pdf(file):
     return text.strip()
 
 def extract_text_from_docx(file):
-    """Extract text from DOCX file"""
     doc = docx.Document(file)
-    text = "\n".join([para.text for para in doc.paragraphs])
-    return text.strip()
+    text_parts = []
+
+    # Paragraph text
+    for para in doc.paragraphs:
+        if para.text.strip():
+            text_parts.append(para.text)
+
+    # Table text (CRITICAL FIX)
+    for table in doc.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                if cell.text.strip():
+                    text_parts.append(cell.text)
+
+    return "\n".join(text_parts).strip()
+
+
+
 
 def extract_text_from_image(file):
     """Extract text from image using OCR"""
@@ -39,24 +54,27 @@ def extract_text_from_txt(file):
 def extract_text(file):
     """
     Main function to extract text from any file format
-    Supports: PDF, DOCX, Images (PNG, JPG), TXT
+    Streamlit-safe: reads file ONCE and routes by extension
     """
+    file.seek(0)
+    file_bytes = file.read()
     file_type = file.name.lower()
-    
+
     if file_type.endswith('.pdf'):
-        return extract_text_from_pdf(file)
+        return extract_text_from_pdf(io.BytesIO(file_bytes))
+
     elif file_type.endswith('.docx'):
-        return extract_text_from_docx(file)
+        return extract_text_from_docx(io.BytesIO(file_bytes))
+
     elif file_type.endswith(('.png', '.jpg', '.jpeg', '.bmp', '.tiff')):
-        return extract_text_from_image(file)
+        return extract_text_from_image(io.BytesIO(file_bytes))
+
     elif file_type.endswith('.txt'):
-        return extract_text_from_txt(file)
+        return file_bytes.decode("utf-8", errors="ignore")
+
     else:
-        # Try to read as text
-        try:
-            return file.read().decode('utf-8')
-        except:
-            return "Unable to extract text from this file format."
+        return file_bytes.decode("utf-8", errors="ignore")
+
 
 def extract_skills_from_text(text):
     """Extract skills from resume text"""

@@ -947,20 +947,8 @@ if resume_uploader_active:
         resume_text = extract_text(uploaded_file)
         resume_text = clean_text(resume_text)
         
-        if resume_text and len(resume_text) > 50:
-            # Show analysis progress
-            with st.spinner("🔍 Analyzing your resume..."):
-                import time
-                time.sleep(1)  # Simulate analysis time
-                
-                # Calculate ATS score
-                ats_result = get_detailed_ats_analysis(resume_text, target_role_selected)
-                
-                # Store resume text
-                st.session_state.agent_state["resume_text"] = resume_text
-                st.session_state.agent_state["has_resume"] = True
 
-        if resume_text and len(resume_text) > 50:
+        if resume_text and len(resume_text.strip()) >= 20:
             # Store resume text
             st.session_state.agent_state["resume_text"] = resume_text
             st.session_state.agent_state["has_resume"] = True
@@ -1244,6 +1232,17 @@ if resume_uploader_active:
             st.session_state.show_resume_uploader = False
             st.session_state.show_ats_uploader = False
             st.rerun()
+
+        else:
+            st.error(
+                "⚠️ Unable to read enough text from this resume.\n\n"
+                "This commonly happens with DOCX files where content is inside tables or text boxes.\n\n"
+                "👉 Please try:\n"
+                "- Uploading a **PDF** version (recommended)\n"
+                "- Or using a simpler DOCX format"
+            )
+            st.stop()
+
     
     # Cancel button
     cancel_key = "cancel_unified_resume"
