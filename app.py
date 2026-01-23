@@ -21,6 +21,77 @@ from utils.dynamic_career_agent import (
 )
 
 import re
+import difflib
+
+
+def _normalize_role_text(text: str) -> str:
+    text = (text or "").strip().lower()
+    # Keep alphanumerics, turn the rest into spaces, collapse whitespace.
+    text = re.sub(r"[^a-z0-9]+", " ", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
+
+
+def resolve_role(user_text: str, allowed_roles: list[str] | None = None) -> str | None:
+    """
+    Convert freeform user input (any casing / minor variations) into a canonical role name.
+
+    - If allowed_roles is provided, only returns one of those roles.
+    """
+    if not user_text:
+        return None
+
+    canonical_roles = list(ROADMAP_LINKS.keys())
+    allowed = allowed_roles or canonical_roles
+
+    norm = _normalize_role_text(user_text)
+    if not norm:
+        return None
+
+    # Canonical normalization map + a few common aliases.
+    aliases: dict[str, str] = {}
+    for role in canonical_roles:
+        aliases[_normalize_role_text(role)] = role
+
+    # Common user variations
+    aliases.update({
+        "frontend": "Frontend Developer",
+        "front end": "Frontend Developer",
+        "front end developer": "Frontend Developer",
+        "backend": "Backend Developer",
+        "back end": "Backend Developer",
+        "back end developer": "Backend Developer",
+        "fullstack": "Full Stack Developer",
+        "full stack": "Full Stack Developer",
+        "full stack developer": "Full Stack Developer",
+        "data analyst": "Data Analyst",
+        "data analytics": "Data Analyst",
+        "data scientist": "Data Scientist",
+        "devops": "DevOps Engineer",
+        "dev ops": "DevOps Engineer",
+        "cyber security": "Cybersecurity Analyst",
+        "cybersecurity": "Cybersecurity Analyst",
+        "security analyst": "Cybersecurity Analyst",
+    })
+
+    # 1) Exact alias hit
+    candidate = aliases.get(norm)
+    if candidate and candidate in allowed:
+        return candidate
+
+    # 2) Substring match against canonical role names (helps when user types extra words)
+    for role in allowed:
+        role_norm = _normalize_role_text(role)
+        if role_norm and (norm == role_norm or norm in role_norm or role_norm in norm):
+            return role
+
+    # 3) Fuzzy match (typos, small differences)
+    allowed_norms = { _normalize_role_text(r): r for r in allowed }
+    close = difflib.get_close_matches(norm, list(allowed_norms.keys()), n=1, cutoff=0.75)
+    if close:
+        return allowed_norms[close[0]]
+
+    return None
 
 def clean_text(text):
     """Remove HTML tags and clean text"""
@@ -454,20 +525,25 @@ if user_input:
 
     # Check if user is selecting a career from suggestions
     suggested_careers = st.session_state.agent_state.get("suggested_careers", [])
-    if suggested_careers and user_input in suggested_careers:
-        st.session_state.agent_state["target_role"] = user_input
+    selected_from_suggestions = resolve_role(user_input, allowed_roles=suggested_careers) if suggested_careers else None
+    if selected_from_suggestions:
+        st.session_state.agent_state["target_role"] = selected_from_suggestions
         st.session_state.agent_state["step"] = "generate_roadmap"
         # Generate roadmap directly
-        from utils.roadmap_generator import generate_roadmap_mermaid
-        roadmap = generate_roadmap_mermaid(user_input)
+        from utils.roadmap_generator import generate_roadmap_mermaid, generate_roadmap_markdown
+        roadmap = generate_roadmap_mermaid(selected_from_suggestions)
+        details = generate_roadmap_markdown(selected_from_suggestions)
         if roadmap:
-            roadmap_msg = f"## 🗺️ Roadmap for {user_input}\n\n{roadmap}\n\n"
+            roadmap_msg = f"## 🗺️ Roadmap for {selected_from_suggestions}\n\n"
+            roadmap_msg += f"{roadmap}\n\n"
+            if details:
+                roadmap_msg += f"{details}\n\n"
             roadmap_msg += "**Next Steps:**\n1. Follow the roadmap step by step\n2. Use SkillBridge to check your progress\n3. Build projects for each skill"
             st.session_state.chat.append({"role": "assistant", "content": roadmap_msg})
         else:
             st.session_state.chat.append({
                 "role": "assistant", 
-                "content": f"📚 **Learning Path for {user_input}:**\n\n1. Learn fundamentals\n2. Build projects\n3. Practice coding\n4. Get certifications"
+                "content": f"📚 **Learning Path for {selected_from_suggestions}:**\n\n1. Learn fundamentals\n2. Build projects\n3. Practice coding\n4. Get certifications"
             })
         st.session_state.chat.append({
             "role": "assistant",
@@ -528,19 +604,23 @@ if user_input:
             target_role = st.session_state.agent_state.get("target_role")
             
             if not target_role:
-                # Check if user selected a career from suggestions
-                if user_input in ["Frontend Developer", "Backend Developer", "Full Stack Developer",
-                                 "Data Analyst", "Data Scientist", "DevOps Engineer", "Cybersecurity Analyst"]:
-                    target_role = user_input
-                    st.session_state.agent_state["target_role"] = target_role
+                # Try to resolve from freeform user input (case-insensitive, minor variations).
+                resolved = resolve_role(user_input)
+                if resolved:
+                    target_role = resolved
+                    st.session_state.agent_state["target_role"] = resolved
             
             if target_role:
                 # Import roadmap generator
-                from utils.roadmap_generator import generate_roadmap_mermaid
+                from utils.roadmap_generator import generate_roadmap_mermaid, generate_roadmap_markdown
                 
                 roadmap = generate_roadmap_mermaid(target_role)
+                details = generate_roadmap_markdown(target_role)
                 if roadmap:
-                    roadmap_msg = f"## 🗺️ Roadmap for {target_role}\n\n{roadmap}\n\n"
+                    roadmap_msg = f"## 🗺️ Roadmap for {target_role}\n\n"
+                    roadmap_msg += f"{roadmap}\n\n"
+                    if details:
+                        roadmap_msg += f"{details}\n\n"
                     roadmap_msg += "**Next Steps:**\n"
                     roadmap_msg += "1. Follow the roadmap step by step\n"
                     roadmap_msg += "2. Use SkillBridge to check your progress\n"
