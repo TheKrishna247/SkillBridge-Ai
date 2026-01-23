@@ -257,7 +257,9 @@ if "agent_state" not in st.session_state:
         "target_role": None,
         "experience": None,
         "time_per_day": None,
-        "goal_timeline": None
+        "goal_timeline": None,
+        "asked_skillbridge_after_roadmap": False,
+        "skillbridge_requested": False,
     }
 
 
@@ -290,7 +292,9 @@ def reset_app():
     "target_role": None,
     "experience": None,
     "time_per_day": None,
-    "goal_timeline": None
+    "goal_timeline": None,
+    "asked_skillbridge_after_roadmap": False,
+    "skillbridge_requested": False,
 }
 
 
@@ -487,6 +491,107 @@ if st.session_state.screen == "home":
             </div>
         """, unsafe_allow_html=True)
 
+    # Roadmap graph renderer (node graph style)
+    roadmap_graph = st.session_state.agent_state.get("roadmap_graph")
+    if roadmap_graph:
+        nodes = roadmap_graph.get("nodes", [])
+        edges = roadmap_graph.get("edges", [])
+
+        # Build lookup for positions
+        pos = {n["id"]: n["position"] for n in nodes if "position" in n}
+
+        html_nodes = []
+        for n in nodes:
+            p = n.get("position", {"x": 0, "y": 0})
+            left = 40 + p["x"] * 220
+            top = 40 + int(p["y"] * 90)
+            node_class = "main-node" if n.get("type") == "main" else "sub-node"
+            html_nodes.append(
+                f"<div class='roadmap-node {node_class}' style='left:{left}px; top:{top}px;'>{n['label']}</div>"
+            )
+
+        # SVG edges
+        svg_lines = []
+        for e in edges:
+            p1 = pos.get(e["from"])
+            p2 = pos.get(e["to"])
+            if not p1 or not p2:
+                continue
+            x1 = 40 + p1["x"] * 220 + 80
+            y1 = 40 + int(p1["y"] * 90) + 25
+            x2 = 40 + p2["x"] * 220
+            y2 = 40 + int(p2["y"] * 90) + 25
+            dash = "4,4" if e.get("style") == "dotted" else "0"
+            svg_lines.append(
+                f"<line x1='{x1}' y1='{y1}' x2='{x2}' y2='{y2}' stroke='#9CA3AF' stroke-width='2' stroke-dasharray='{dash}' />"
+            )
+
+        legend = roadmap_graph.get("legend", [])
+        legend_html = "".join(f"<span class='legend-item'>{item['label']}</span>" for item in legend)
+
+        roadmap_html = f"""
+        <style>
+        .roadmap-wrapper {{
+            position: relative;
+            margin-top: 1rem;
+            margin-bottom: 1.5rem;
+            padding: 1.5rem 1rem 2rem 1rem;
+            border-radius: 16px;
+            background: rgba(249, 250, 251, 0.9);
+            overflow: hidden;
+        }}
+        .roadmap-canvas {{
+            position: relative;
+            min-height: 320px;
+        }}
+        .roadmap-node {{
+            position: absolute;
+            padding: 8px 14px;
+            border-radius: 10px;
+            font-size: 0.85rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+            max-width: 210px;
+        }}
+        .roadmap-node.main-node {{
+            background: #FEF3C7;
+            border: 1px solid #F59E0B;
+            font-weight: 600;
+        }}
+        .roadmap-node.sub-node {{
+            background: #E5E7EB;
+            border: 1px solid #9CA3AF;
+        }}
+        .roadmap-edges {{
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }}
+        .roadmap-legend {{
+            margin-top: 0.75rem;
+            font-size: 0.8rem;
+            color: #4B5563;
+        }}
+        .roadmap-legend .legend-item {{
+            display: inline-block;
+            margin-right: 12px;
+        }}
+        </style>
+        <div class='roadmap-wrapper'>
+          <div><strong>{roadmap_graph.get("title","Roadmap")}</strong></div>
+          <div class='roadmap-canvas'>
+            <svg class='roadmap-edges'>
+              {''.join(svg_lines)}
+            </svg>
+            {''.join(html_nodes)}
+          </div>
+          <div class='roadmap-legend'>{legend_html}</div>
+        </div>
+        """
+        st.markdown(roadmap_html, unsafe_allow_html=True)
+
 
     if "show_resume_uploader" not in st.session_state:
         st.session_state.show_resume_uploader = False
@@ -523,40 +628,66 @@ if user_input:
         })
         st.rerun()
 
+    # Global shortcut: continue directly to SkillBridge
+    lower_msg = user_input.lower()
+    if "skill" in lower_msg and "bridge" in lower_msg and "continue" in lower_msg:
+        st.session_state.agent_state["mode"] = "skillbridge"
+        st.session_state.agent_state["skillbridge_requested"] = True
+        # If we already know target_role, jump straight into asking about resume;
+        # otherwise let the agent ask for target role.
+        if st.session_state.agent_state.get("target_role"):
+            st.session_state.agent_state["step"] = "ask_resume"
+            st.session_state.chat.append({
+                "role": "assistant",
+                "content": f"Great! Let's analyze your skills for **{st.session_state.agent_state['target_role']}**.\n\n**Do you have a resume?**"
+            })
+        else:
+            st.session_state.agent_state["step"] = "skillbridge_start"
+            st.session_state.chat.append({
+                "role": "assistant",
+                "content": "Great! Let's bridge your skill gap.\n\n**What job profile do you want to target?**"
+            })
+        st.rerun()
+
     # Check if user is selecting a career from suggestions
     suggested_careers = st.session_state.agent_state.get("suggested_careers", [])
     selected_from_suggestions = resolve_role(user_input, allowed_roles=suggested_careers) if suggested_careers else None
     if selected_from_suggestions:
         st.session_state.agent_state["target_role"] = selected_from_suggestions
         st.session_state.agent_state["step"] = "generate_roadmap"
-        # Generate roadmap directly
-        from utils.roadmap_generator import generate_roadmap_mermaid, generate_roadmap_markdown
-        roadmap = generate_roadmap_mermaid(selected_from_suggestions)
-        details = generate_roadmap_markdown(selected_from_suggestions)
-        if roadmap:
-            roadmap_msg = f"## 🗺️ Roadmap for {selected_from_suggestions}\n\n"
-            roadmap_msg += f"{roadmap}\n\n"
-            if details:
-                roadmap_msg += f"{details}\n\n"
-            roadmap_msg += "**Next Steps:**\n1. Follow the roadmap step by step\n2. Use SkillBridge to check your progress\n3. Build projects for each skill"
-            st.session_state.chat.append({"role": "assistant", "content": roadmap_msg})
+        # Generate roadmap directly (graph JSON)
+        from utils.roadmap_generator import generate_roadmap_graph
+        graph = generate_roadmap_graph(selected_from_suggestions)
+        st.session_state.agent_state["roadmap_graph"] = graph
+        if graph:
+            st.session_state.chat.append({
+                "role": "assistant",
+                "content": f"## 🗺️ Roadmap for **{selected_from_suggestions}** (see interactive graph above)."
+            })
         else:
             st.session_state.chat.append({
                 "role": "assistant", 
                 "content": f"📚 **Learning Path for {selected_from_suggestions}:**\n\n1. Learn fundamentals\n2. Build projects\n3. Practice coding\n4. Get certifications"
             })
-        st.session_state.chat.append({
-            "role": "assistant",
-            "content": "**Would you like to analyze your current skills with SkillBridge?** Type 'Yes' to continue."
-        })
+        if not st.session_state.agent_state.get("asked_skillbridge_after_roadmap"):
+            st.session_state.chat.append({
+                "role": "assistant",
+                "content": "**Would you like to analyze your current skills with SkillBridge?** Type 'Yes' to continue."
+            })
+            st.session_state.agent_state["asked_skillbridge_after_roadmap"] = True
         st.rerun()
     
-    # Check if user wants to continue to SkillBridge after roadmap
-    if "yes" in user_input.lower() and st.session_state.agent_state.get("mode") == "roadmap":
+    # Check if user wants to continue to SkillBridge after roadmap via simple "yes"
+    if (
+        "yes" in lower_msg
+        and st.session_state.agent_state.get("mode") == "roadmap"
+        and st.session_state.agent_state.get("step") == "generate_roadmap"
+    ):
         target_role = st.session_state.agent_state.get("target_role")
         if target_role:
             st.session_state.agent_state["mode"] = "skillbridge"
-            st.session_state.agent_state["step"] = "skillbridge_start"
+            st.session_state.agent_state["skillbridge_requested"] = True
+            st.session_state.agent_state["step"] = "ask_resume"
             st.session_state.chat.append({
                 "role": "assistant",
                 "content": f"Great! Let's analyze your skills for **{target_role}**.\n\n**Do you have a resume?**"
@@ -611,25 +742,15 @@ if user_input:
                     st.session_state.agent_state["target_role"] = resolved
             
             if target_role:
-                # Import roadmap generator
-                from utils.roadmap_generator import generate_roadmap_mermaid, generate_roadmap_markdown
-                
-                roadmap = generate_roadmap_mermaid(target_role)
-                details = generate_roadmap_markdown(target_role)
-                if roadmap:
-                    roadmap_msg = f"## 🗺️ Roadmap for {target_role}\n\n"
-                    roadmap_msg += f"{roadmap}\n\n"
-                    if details:
-                        roadmap_msg += f"{details}\n\n"
-                    roadmap_msg += "**Next Steps:**\n"
-                    roadmap_msg += "1. Follow the roadmap step by step\n"
-                    roadmap_msg += "2. Use SkillBridge to check your progress\n"
-                    roadmap_msg += "3. Build projects for each skill\n"
-                    roadmap_msg += "4. Practice regularly and track your progress"
-                    
+                # Import roadmap generator (graph JSON)
+                from utils.roadmap_generator import generate_roadmap_graph
+
+                graph = generate_roadmap_graph(target_role)
+                st.session_state.agent_state["roadmap_graph"] = graph
+                if graph:
                     st.session_state.chat.append({
-                        "role": "assistant", 
-                        "content": roadmap_msg
+                        "role": "assistant",
+                        "content": f"## 🗺️ Roadmap for **{target_role}** (see interactive graph above)."
                     })
                 else:
                     # Fallback if roadmap not available
@@ -638,11 +759,13 @@ if user_input:
                         "content": f"📚 **Learning Path for {target_role}:**\n\n1. Learn fundamentals\n2. Build projects\n3. Practice coding\n4. Get certifications\n5. Build portfolio"
                     })
                 
-                # Offer to continue to SkillBridge
-                st.session_state.chat.append({
-                    "role": "assistant",
-                    "content": "**Would you like to analyze your current skills with SkillBridge?**\n\nThis will help you see how ready you are for this role and identify what skills you need to learn.\n\nType 'Yes' to continue to SkillBridge or 'No' to finish."
-                })
+                # Offer to continue to SkillBridge (only once)
+                if not st.session_state.agent_state.get("asked_skillbridge_after_roadmap"):
+                    st.session_state.chat.append({
+                        "role": "assistant",
+                        "content": "**Would you like to analyze your current skills with SkillBridge?**\n\nThis will help you see how ready you are for this role and identify what skills you need to learn.\n\nType 'Yes' to continue to SkillBridge or 'No' to finish."
+                    })
+                    st.session_state.agent_state["asked_skillbridge_after_roadmap"] = True
             else:
                 st.session_state.chat.append({
                     "role": "assistant",
@@ -913,6 +1036,113 @@ if resume_uploader_active:
                 with st.expander("💡 **Improvement Suggestions**", expanded=True):
                     for i, suggestion in enumerate(ats_result["suggestions"], 1):
                         st.markdown(f"**{i}.** {suggestion}")
+
+            # Download ATS report as PDF (optional, only if reportlab is installed)
+            try:
+                from io import BytesIO
+                from reportlab.lib.pagesizes import A4
+                from reportlab.pdfgen import canvas
+                _pdf_available = True
+            except ImportError:
+                _pdf_available = False
+
+            def _build_ats_pdf() -> bytes:
+                from io import BytesIO as _BytesIO
+                from reportlab.lib.pagesizes import A4 as _A4
+                from reportlab.pdfgen import canvas as _canvas
+
+                buffer = _BytesIO()
+                c = _canvas.Canvas(buffer, pagesize=_A4)
+                width, height = _A4
+
+                y = height - 50
+                c.setFont("Helvetica-Bold", 16)
+                c.drawString(50, y, "ATS Score Report")
+                y -= 30
+
+                c.setFont("Helvetica", 11)
+                c.drawString(50, y, f"Score: {ats_result['score']}/100 ({ats_result.get('grade', '')})")
+                y -= 18
+                if target_role_selected:
+                    c.drawString(50, y, f"Target Role: {target_role_selected}")
+                    y -= 24
+
+                # Helper to write wrapped text
+                def write_block(title: str, lines: list[str]):
+                    nonlocal y
+                    if not lines:
+                        return
+                    if y < 80:
+                        c.showPage()
+                        y = height - 50
+                    c.setFont("Helvetica-Bold", 12)
+                    c.drawString(50, y, title)
+                    y -= 18
+                    c.setFont("Helvetica", 10)
+                    for line in lines:
+                        words = line.split()
+                        current = ""
+                        for w in words:
+                            test = (current + " " + w).strip()
+                            if c.stringWidth(test, "Helvetica", 10) > width - 100:
+                                c.drawString(60, y, current)
+                                y -= 14
+                                current = w
+                                if y < 80:
+                                    c.showPage()
+                                    y = height - 50
+                            else:
+                                current = test
+                        if current:
+                            c.drawString(60, y, current)
+                            y -= 14
+                            if y < 80:
+                                c.showPage()
+                                y = height - 50
+                    y -= 10
+
+                # Sections
+                if 'section_analysis' in ats_result:
+                    sec = ats_result['section_analysis']
+                    lines = [
+                        f"Score: {sec.get('score', 0)}/{sec.get('max_score', 0)}",
+                    ]
+                    if sec.get('found'):
+                        lines.append("Found sections: " + ", ".join(sec['found']))
+                    if sec.get('missing'):
+                        lines.append("Missing sections: " + ", ".join(sec['missing']))
+                    write_block("Sections", lines)
+
+                if ats_result.get("matched_skills"):
+                    write_block(
+                        "Matched Skills",
+                        [", ".join(ats_result["matched_skills"])]
+                        if isinstance(ats_result["matched_skills"][0], str)
+                        else [", ".join(map(str, ats_result["matched_skills"]))],
+                    )
+
+                if ats_result.get("missing_skills"):
+                    write_block("Missing Skills", [", ".join(ats_result["missing_skills"])])
+
+                if ats_result.get("suggestions"):
+                    write_block("Suggestions", [f"{i+1}. {s}" for i, s in enumerate(ats_result["suggestions"])])
+
+                c.showPage()
+                c.save()
+                pdf = buffer.getvalue()
+                buffer.close()
+                return pdf
+
+            if _pdf_available:
+                pdf_bytes = _build_ats_pdf()
+                st.download_button(
+                    "📥 Download ATS Report (PDF)",
+                    data=pdf_bytes,
+                    file_name="ats_report.pdf",
+                    mime="application/pdf",
+                )
+            else:
+                st.info("Install the 'reportlab' package to enable PDF download (e.g. `pip install reportlab`).")
             
             # Add comprehensive results to chat with better formatting
             score_msg = f"## 📊 ATS Score Analysis\n\n"

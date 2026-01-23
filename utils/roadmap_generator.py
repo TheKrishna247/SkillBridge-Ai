@@ -202,6 +202,75 @@ ROADMAPS = {
     ],
 }
 
+MAIN_TRACKS = {
+    "Frontend Developer": [
+        "Front-end",
+        "Internet",
+        "HTML",
+        "CSS",
+        "JavaScript",
+        "Version Control",
+        "Package Managers",
+        "Framework",
+        "Testing",
+        "Projects",
+    ],
+    "Backend Developer": [
+        "Back-end",
+        "Programming Language",
+        "Databases",
+        "APIs",
+        "Caching",
+        "Dev Practices",
+        "Deployment",
+        "Projects",
+    ],
+    "Full Stack Developer": [
+        "Full-stack",
+        "Front-end",
+        "Back-end",
+        "Dev Practices",
+        "Deployment",
+        "Projects",
+    ],
+    "Data Analyst": [
+        "Data Analyst",
+        "Foundations",
+        "SQL",
+        "Python (optional but strong)",
+        "Visualization",
+        "Analytics",
+        "Projects",
+    ],
+    "Data Scientist": [
+        "Data Scientist",
+        "Math & Stats",
+        "Python",
+        "SQL",
+        "Machine Learning",
+        "MLOps Basics",
+        "Projects",
+    ],
+    "DevOps Engineer": [
+        "DevOps",
+        "Linux",
+        "Version Control",
+        "Containers",
+        "CI/CD",
+        "Cloud",
+        "Observability",
+        "Projects",
+    ],
+    "Cybersecurity Analyst": [
+        "Cybersecurity",
+        "Foundations",
+        "Web Security",
+        "Blue Team",
+        "Tools",
+        "Projects",
+    ],
+}
+
 ROADMAP_DETAILS = {
     "Frontend Developer": [
         (
@@ -489,10 +558,12 @@ def generate_roadmap_mermaid(role):
     if not edges:
         return None
 
-    diagram = "```mermaid\ngraph TD\n"
+    diagram = "```mermaid\nflowchart TD\n"
 
     for src, dst in edges:
-        diagram += f"    {src.replace(' ', '_')} --> {dst.replace(' ', '_')}\n"
+        s = src.replace(" ", "_").replace("/", "_").replace("-", "_")
+        d = dst.replace(" ", "_").replace("/", "_").replace("-", "_")
+        diagram += f"    {s} --> {d}\n"
 
     diagram += "```"
     return diagram
@@ -514,3 +585,96 @@ def generate_roadmap_markdown(role: str) -> str | None:
         lines.append("")  # blank line between sections
 
     return "\n".join(lines).strip()
+
+
+def generate_roadmap_graph(role: str) -> dict | None:
+    """
+    Return roadmap as a structured graph JSON object:
+    {
+      "title": str,
+      "nodes": [{id,label,category,type,position:{x,y}}],
+      "edges": [{from,to,style}],
+      "legend": [...],
+      "metadata": {...}
+    }
+    """
+    edges = ROADMAPS.get(role)
+    if not edges:
+        return None
+
+    main_track = MAIN_TRACKS.get(role, [])
+
+    def slug(name: str) -> str:
+        return name.lower().replace(" ", "_").replace("/", "_").replace("-", "_")
+
+    nodes = []
+    node_index = {}
+
+    # Build main track nodes (center column)
+    for i, name in enumerate(main_track):
+        node_id = slug(name)
+        node = {
+            "id": node_id,
+            "label": name,
+            "category": "main",
+            "type": "main",
+            "position": {"x": 0, "y": i},
+        }
+        nodes.append(node)
+        node_index[name] = node
+
+    # Build subnodes from ROADMAP_DETAILS (right side)
+    details = ROADMAP_DETAILS.get(role, [])
+    for section_idx, (section_title, bullets) in enumerate(details):
+        # Section node aligned with its closest main-track node if present
+        base_y = main_track.index(section_title) if section_title in main_track else len(main_track) + section_idx
+        section_id = slug(section_title)
+        if section_title not in node_index:
+            sec_node = {
+                "id": section_id,
+                "label": section_title,
+                "category": section_title,
+                "type": "sub",
+                "position": {"x": 1, "y": base_y},
+            }
+            nodes.append(sec_node)
+            node_index[section_title] = sec_node
+        # Bullet nodes stacked to the right
+        for j, bullet in enumerate(bullets):
+            bullet_id = slug(f"{section_title}_{j}")
+            nodes.append(
+                {
+                    "id": bullet_id,
+                    "label": bullet,
+                    "category": section_title,
+                    "type": "optional",
+                    "position": {"x": 2, "y": base_y + j * 0.6},
+                }
+            )
+
+    # Build edges with styles
+    edge_items = []
+    main_set = set(main_track)
+    for src, dst in edges:
+        edge_style = "solid" if src in main_set and dst in main_set else "dotted"
+        edge_items.append(
+            {
+                "from": slug(src),
+                "to": slug(dst),
+                "style": edge_style,
+            }
+        )
+
+    legend = [
+        {"label": "Personal Recommendation", "type": "primary"},
+        {"label": "Alternative Option", "type": "secondary"},
+        {"label": "Order not strict", "type": "info"},
+    ]
+
+    return {
+        "title": role,
+        "nodes": nodes,
+        "edges": edge_items,
+        "legend": legend,
+        "metadata": {"role": role},
+    }

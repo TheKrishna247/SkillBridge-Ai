@@ -361,9 +361,9 @@ class SkillBridgeAgent:
                 "options": []
             }
         
-        # Other steps...
+        # Other steps... keep silent fallback to avoid noisy "processing" messages
         return {
-            "response": "Processing your SkillBridge request...",
+            "response": "",
             "action": "continue",
             "options": []
         }
