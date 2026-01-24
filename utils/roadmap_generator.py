@@ -587,94 +587,62 @@ def generate_roadmap_markdown(role: str) -> str | None:
     return "\n".join(lines).strip()
 
 
-def generate_roadmap_graph(role: str) -> dict | None:
-    """
-    Return roadmap as a structured graph JSON object:
-    {
-      "title": str,
-      "nodes": [{id,label,category,type,position:{x,y}}],
-      "edges": [{from,to,style}],
-      "legend": [...],
-      "metadata": {...}
-    }
-    """
+def generate_roadmap_graph(role: str):
     edges = ROADMAPS.get(role)
     if not edges:
         return None
 
-    main_track = MAIN_TRACKS.get(role, [])
-
-    def slug(name: str) -> str:
-        return name.lower().replace(" ", "_").replace("/", "_").replace("-", "_")
-
     nodes = []
-    node_index = {}
+    seen = {}
 
-    # Build main track nodes (center column)
-    for i, name in enumerate(main_track):
-        node_id = slug(name)
-        node = {
-            "id": node_id,
-            "label": name,
-            "category": "main",
-            "type": "main",
-            "position": {"x": 0, "y": i},
-        }
-        nodes.append(node)
-        node_index[name] = node
+    # Root
+    root_id = role.lower().replace(" ", "_")
+    nodes.append({
+        "id": root_id,
+        "label": role,
+        "level": 0
+    })
+    seen[role] = root_id
 
-    # Build subnodes from ROADMAP_DETAILS (right side)
-    details = ROADMAP_DETAILS.get(role, [])
-    for section_idx, (section_title, bullets) in enumerate(details):
-        # Section node aligned with its closest main-track node if present
-        base_y = main_track.index(section_title) if section_title in main_track else len(main_track) + section_idx
-        section_id = slug(section_title)
-        if section_title not in node_index:
-            sec_node = {
-                "id": section_id,
-                "label": section_title,
-                "category": section_title,
-                "type": "sub",
-                "position": {"x": 1, "y": base_y},
-            }
-            nodes.append(sec_node)
-            node_index[section_title] = sec_node
-        # Bullet nodes stacked to the right
-        for j, bullet in enumerate(bullets):
-            bullet_id = slug(f"{section_title}_{j}")
-            nodes.append(
-                {
-                    "id": bullet_id,
-                    "label": bullet,
-                    "category": section_title,
-                    "type": "optional",
-                    "position": {"x": 2, "y": base_y + j * 0.6},
-                }
-            )
+    # ✅ Ordered tracks (roadmap.sh style)
+    tracks = MAIN_TRACKS.get(role, [])
 
-    # Build edges with styles
-    edge_items = []
-    main_set = set(main_track)
-    for src, dst in edges:
-        edge_style = "solid" if src in main_set and dst in main_set else "dotted"
-        edge_items.append(
-            {
-                "from": slug(src),
-                "to": slug(dst),
-                "style": edge_style,
-            }
-        )
+    # Helper to create stable, namespaced IDs
+    def _id(name: str, parent: str | None = None) -> str:
+        base = name.lower().replace(" ", "_").replace("/", "_").replace("-", "_")
+        if parent:
+            p = parent.lower().replace(" ", "_").replace("/", "_").replace("-", "_")
+            return f"{p}__{base}"
+        return base
 
-    legend = [
-        {"label": "Personal Recommendation", "type": "primary"},
-        {"label": "Alternative Option", "type": "secondary"},
-        {"label": "Order not strict", "type": "info"},
-    ]
+    # 1️⃣ Add main tracks in correct order
+    for track in tracks:
+        if track not in seen:
+            pid = _id(track, role)
+            seen[track] = pid
+            nodes.append({
+                "id": pid,
+                "label": track,
+                "level": 1,
+                "parent": root_id
+            })
 
-    return {
-        "title": role,
-        "nodes": nodes,
-        "edges": edge_items,
-        "legend": legend,
-        "metadata": {"role": role},
-    }
+    # 2️⃣ Attach children under correct tracks
+    for parent, child in edges:
+        if parent not in seen:
+            continue  # ignore non-main-track parents
+
+        child_key = f"{parent}::{child}"
+
+        if child_key not in seen:
+            cid = _id(child, parent)
+            seen[child_key] = cid
+            nodes.append({
+                "id": cid,
+                "label": child,
+                "level": 2,
+                "parent": seen[parent]
+            })
+
+    # ✅ REQUIRED
+    return {"nodes": nodes}

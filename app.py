@@ -102,6 +102,53 @@ def clean_text(text):
     # Remove extra whitespace
     text = re.sub(r'\s+', ' ', text)
     return text.strip()
+
+def render_roadmap_tree(nodes):
+    html = "<div class='roadmap-tree' style='position:relative;'>"
+
+    level_groups = {}
+    for n in nodes:
+        level_groups.setdefault(n["level"], []).append(n)
+
+    # Root (level 0)
+    root = level_groups.get(0, [])[0]
+    html += f"""
+        <div class='tree-node tree-root'
+             style='position:relative; margin:0 auto;'>
+            {root['label']}
+        </div>
+    """
+
+    # Level 1 (tracks)
+    level1 = level_groups.get(1, [])
+    html += "<div style='display:flex; justify-content:space-around; margin-top:40px;'>"
+    for n in level1:
+        html += f"""
+            <div class='tree-node tree-level-1'>
+                {n['label']}
+            </div>
+        """
+    html += "</div>"
+
+    # Level 2 (children)
+    for parent in level1:
+        children = [n for n in nodes if n.get("parent") == parent["id"]]
+        if not children:
+            continue
+
+        html += "<div style='display:flex; justify-content:center; gap:12px; margin-top:18px;'>"
+        for c in children:
+            html += f"""
+                <div class='tree-node tree-level-2'>
+                    {c['label']}
+                </div>
+            """
+        html += "</div>"
+
+    html += "</div>"
+    return html
+
+
 # -----------------------------
 # CHAT INIT (AFTER PAGE CONFIG)
 # -----------------------------
@@ -232,6 +279,54 @@ button[kind="secondary"]:hover {
 """, unsafe_allow_html=True)
 
 
+# -----------------------------
+# ROADMAP TREE CSS (ADD HERE)
+# -----------------------------
+
+st.markdown("""
+<style>
+.roadmap-tree {
+    position: relative;
+    margin: 2rem auto;
+    padding: 2rem 1rem;
+    background: #F9FAFB;
+    border-radius: 16px;
+    border: 1px solid #E5E7EB;
+}
+
+.tree-node {
+    margin: 12px auto;
+    padding: 10px 16px;
+    max-width: 420px;
+    border-radius: 12px;
+    font-size: 0.9rem;
+    text-align: center;
+}
+
+.tree-root {
+    background: #FEF3C7;
+    border: 2px solid #F59E0B;
+    font-weight: 700;
+}
+
+.tree-level-1 {
+    background: #DBEAFE;
+    border: 1px solid #3B82F6;
+}
+
+.tree-level-2 {
+    background: #E5E7EB;
+    border: 1px solid #9CA3AF;
+}
+
+.tree-connector {
+    width: 2px;
+    height: 18px;
+    background: #9CA3AF;
+    margin: 0 auto;
+}
+</style>
+""", unsafe_allow_html=True)
 
 
 # -----------------------------
@@ -296,6 +391,14 @@ def reset_app():
     "asked_skillbridge_after_roadmap": False,
     "skillbridge_requested": False,
 }
+    # 🔥 RESET UPLOADER VISIBILITY FLAGS
+    st.session_state.show_resume_uploader = False
+    st.session_state.show_ats_uploader = False
+
+    # Optional safety resets
+    st.session_state.skill_input_mode = False
+    st.session_state.current_skill_step = "enter_skill"
+
 
 
 # -----------------------------
@@ -422,9 +525,6 @@ if st.session_state.screen == "home":
                             else:
                                 st.session_state.agent_state[key] = value
                 # Also sync agent's internal state back to session state
-                if hasattr(agent, 'state'):
-                    if agent.state.get("current_step"):
-                        st.session_state.agent_state["step"] = agent.state["current_step"]
                     if agent.state.get("mode"):
                         st.session_state.agent_state["mode"] = agent.state["mode"]
             st.rerun()
@@ -491,105 +591,17 @@ if st.session_state.screen == "home":
             </div>
         """, unsafe_allow_html=True)
 
-    # Roadmap graph renderer (node graph style)
+    # -----------------------------
+    # ROADMAP TREE RENDER
+    # -----------------------------
     roadmap_graph = st.session_state.agent_state.get("roadmap_graph")
+
     if roadmap_graph:
+        st.markdown("### 🗺️ Career Roadmap")
+
         nodes = roadmap_graph.get("nodes", [])
-        edges = roadmap_graph.get("edges", [])
 
-        # Build lookup for positions
-        pos = {n["id"]: n["position"] for n in nodes if "position" in n}
-
-        html_nodes = []
-        for n in nodes:
-            p = n.get("position", {"x": 0, "y": 0})
-            left = 40 + p["x"] * 220
-            top = 40 + int(p["y"] * 90)
-            node_class = "main-node" if n.get("type") == "main" else "sub-node"
-            html_nodes.append(
-                f"<div class='roadmap-node {node_class}' style='left:{left}px; top:{top}px;'>{n['label']}</div>"
-            )
-
-        # SVG edges
-        svg_lines = []
-        for e in edges:
-            p1 = pos.get(e["from"])
-            p2 = pos.get(e["to"])
-            if not p1 or not p2:
-                continue
-            x1 = 40 + p1["x"] * 220 + 80
-            y1 = 40 + int(p1["y"] * 90) + 25
-            x2 = 40 + p2["x"] * 220
-            y2 = 40 + int(p2["y"] * 90) + 25
-            dash = "4,4" if e.get("style") == "dotted" else "0"
-            svg_lines.append(
-                f"<line x1='{x1}' y1='{y1}' x2='{x2}' y2='{y2}' stroke='#9CA3AF' stroke-width='2' stroke-dasharray='{dash}' />"
-            )
-
-        legend = roadmap_graph.get("legend", [])
-        legend_html = "".join(f"<span class='legend-item'>{item['label']}</span>" for item in legend)
-
-        roadmap_html = f"""
-        <style>
-        .roadmap-wrapper {{
-            position: relative;
-            margin-top: 1rem;
-            margin-bottom: 1.5rem;
-            padding: 1.5rem 1rem 2rem 1rem;
-            border-radius: 16px;
-            background: rgba(249, 250, 251, 0.9);
-            overflow: hidden;
-        }}
-        .roadmap-canvas {{
-            position: relative;
-            min-height: 320px;
-        }}
-        .roadmap-node {{
-            position: absolute;
-            padding: 8px 14px;
-            border-radius: 10px;
-            font-size: 0.85rem;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
-            max-width: 210px;
-        }}
-        .roadmap-node.main-node {{
-            background: #FEF3C7;
-            border: 1px solid #F59E0B;
-            font-weight: 600;
-        }}
-        .roadmap-node.sub-node {{
-            background: #E5E7EB;
-            border: 1px solid #9CA3AF;
-        }}
-        .roadmap-edges {{
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            pointer-events: none;
-        }}
-        .roadmap-legend {{
-            margin-top: 0.75rem;
-            font-size: 0.8rem;
-            color: #4B5563;
-        }}
-        .roadmap-legend .legend-item {{
-            display: inline-block;
-            margin-right: 12px;
-        }}
-        </style>
-        <div class='roadmap-wrapper'>
-          <div><strong>{roadmap_graph.get("title","Roadmap")}</strong></div>
-          <div class='roadmap-canvas'>
-            <svg class='roadmap-edges'>
-              {''.join(svg_lines)}
-            </svg>
-            {''.join(html_nodes)}
-          </div>
-          <div class='roadmap-legend'>{legend_html}</div>
-        </div>
-        """
+        roadmap_html = render_roadmap_tree(nodes)
         st.markdown(roadmap_html, unsafe_allow_html=True)
 
 

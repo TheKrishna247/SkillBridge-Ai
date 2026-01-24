@@ -39,8 +39,6 @@ def extract_text_from_docx(file):
     return "\n".join(text_parts).strip()
 
 
-
-
 def extract_text_from_image(file):
     """Extract text from image using OCR"""
     image = Image.open(file)
