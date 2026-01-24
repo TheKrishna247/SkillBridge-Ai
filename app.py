@@ -310,48 +310,92 @@ button[kind="secondary"]:hover {
 # -----------------------------
 # ROADMAP TREE CSS (ADD HERE)
 # -----------------------------
-
 st.markdown("""
 <style>
 .roadmap-tree {
     position: relative;
     margin: 2rem auto;
     padding: 2rem 1rem;
-    background: #F9FAFB;
+    background: #FFFFFF;
     border-radius: 16px;
-    border: 1px solid #E5E7EB;
+    border: 2px solid #E5E7EB;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
 }
 
 .tree-node {
     margin: 12px auto;
-    padding: 10px 16px;
+    padding: 12px 20px;
     max-width: 420px;
     border-radius: 12px;
     font-size: 0.9rem;
     text-align: center;
+    font-weight: 600;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    transition: all 0.2s ease;
+}
+
+.tree-node:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
 }
 
 .tree-root {
-    background: #FEF3C7;
+    background: linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%);
     border: 2px solid #F59E0B;
-    font-weight: 700;
+    color: #92400E;
+    font-weight: 800;
+    font-size: 1.1rem;
 }
 
 .tree-level-1 {
-    background: #DBEAFE;
-    border: 1px solid #3B82F6;
+    background: linear-gradient(135deg, #DBEAFE 0%, #BFDBFE 100%);
+    border: 2px solid #3B82F6;
+    color: #1E40AF;
+    font-weight: 700;
 }
 
 .tree-level-2 {
-    background: #E5E7EB;
-    border: 1px solid #9CA3AF;
+    background: linear-gradient(135deg, #F3F4F6 0%, #E5E7EB 100%);
+    border: 2px solid #6B7280;
+    color: #1F2937;
+    font-weight: 600;
 }
 
-.tree-connector {
-    width: 2px;
-    height: 18px;
-    background: #9CA3AF;
+.tree-connector-vertical {
+    width: 3px;
+    height: 30px;
+    background: linear-gradient(180deg, #9CA3AF 0%, #6B7280 100%);
     margin: 0 auto;
+    border-radius: 2px;
+}
+
+.tree-connector-horizontal {
+    height: 3px;
+    background: linear-gradient(90deg, #9CA3AF 0%, #6B7280 100%);
+    border-radius: 2px;
+}
+
+.level-1-container {
+    gap: 2rem !important;
+    margin-bottom: 2rem !important;
+}
+
+.level-2-container {
+    gap: 1.5rem !important;
+    margin-top: 1rem !important;
+}
+
+.child-group {
+    padding: 1rem !important;
+    background: rgba(255, 255, 255, 0.8) !important;
+    border-radius: 12px !important;
+    border: 1px solid rgba(156, 163, 175, 0.3) !important;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05) !important;
+}
+
+.connectors-to-level-2 {
+    gap: 2rem !important;
+    margin-bottom: 1rem !important;
 }
 </style>
 """, unsafe_allow_html=True)
