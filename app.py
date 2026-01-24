@@ -104,45 +104,73 @@ def clean_text(text):
     return text.strip()
 
 def render_roadmap_tree(nodes):
-    html = "<div class='roadmap-tree' style='position:relative;'>"
+    html = "<div class='roadmap-tree' style='position:relative; padding: 2rem;'>"
 
     level_groups = {}
     for n in nodes:
         level_groups.setdefault(n["level"], []).append(n)
 
-    # Root (level 0)
+    # Root (level 0) - Centered at top
     root = level_groups.get(0, [])[0]
     html += f"""
-        <div class='tree-node tree-root'
-             style='position:relative; margin:0 auto;'>
+        <div class='tree-node tree-root' style='position: relative; margin: 0 auto 3rem auto; text-align: center;'>
             {root['label']}
         </div>
     """
 
-    # Level 1 (tracks)
+    # Add connector line from root to level 1
+    html += "<div class='tree-connector-vertical' style='width: 2px; height: 30px; background: #9CA3AF; margin: 0 auto 2rem auto;'></div>"
+
+    # Level 1 (main tracks) - Horizontal layout
     level1 = level_groups.get(1, [])
-    html += "<div style='display:flex; justify-content:space-around; margin-top:40px;'>"
-    for n in level1:
-        html += f"""
-            <div class='tree-node tree-level-1'>
-                {n['label']}
-            </div>
-        """
-    html += "</div>"
-
-    # Level 2 (children)
-    for parent in level1:
-        children = [n for n in nodes if n.get("parent") == parent["id"]]
-        if not children:
-            continue
-
-        html += "<div style='display:flex; justify-content:center; gap:12px; margin-top:18px;'>"
-        for c in children:
+    if level1:
+        html += "<div class='level-1-container' style='display: flex; justify-content: center; gap: 2rem; margin-bottom: 2rem; flex-wrap: wrap;'>"
+        for i, n in enumerate(level1):
             html += f"""
-                <div class='tree-node tree-level-2'>
-                    {c['label']}
+                <div class='tree-node tree-level-1' style='position: relative; min-width: 140px;'>
+                    {n['label']}
                 </div>
             """
+            # Add horizontal connector between level 1 nodes (except last)
+            if i < len(level1) - 1:
+                html += "<div class='tree-connector-horizontal' style='position: absolute; top: 50%; width: 2rem; height: 2px; background: #9CA3AF; right: -2rem;'></div>"
+        html += "</div>"
+
+    # Add connector lines from level 1 to level 2
+    html += "<div class='connectors-to-level-2' style='position: relative;'>"
+    for n in level1:
+        html += "<div class='tree-connector-vertical' style='width: 2px; height: 20px; background: #9CA3AF; margin: 0 auto;'></div>"
+    html += "</div>"
+
+    # Level 2 (children) - Grouped under their parents
+    level2_nodes = level_groups.get(2, [])
+    if level2_nodes:
+        # Group level 2 nodes by their parent
+        parent_groups = {}
+        for node in level2_nodes:
+            parent_id = node.get("parent")
+            if parent_id:
+                parent_groups.setdefault(parent_id, []).append(node)
+
+        html += "<div class='level-2-container' style='display: flex; justify-content: center; gap: 1rem; flex-wrap: wrap;'>"
+        
+        for parent_node in level1:
+            parent_id = parent_node["id"]
+            children = parent_groups.get(parent_id, [])
+            
+            if children:
+                html += f"<div class='child-group' style='display: flex; flex-direction: column; align-items: center; gap: 0.5rem;'>"
+                for child in children:
+                    html += f"""
+                        <div class='tree-node tree-level-2' style='position: relative; min-width: 120px; font-size: 0.85rem;'>
+                            {child['label']}
+                        </div>
+                    """
+                    # Add connector between children
+                    if child != children[-1]:
+                        html += "<div class='tree-connector-vertical' style='width: 2px; height: 10px; background: #9CA3AF; margin: 0 auto;'></div>"
+                html += "</div>"
+        
         html += "</div>"
 
     html += "</div>"
@@ -274,6 +302,114 @@ button[kind="secondary"]:hover {
 
 
 
+
+</style>
+""", unsafe_allow_html=True)
+
+# Enhanced CSS for better flowchart appearance
+st.markdown("""
+<style>
+/* Enhanced Roadmap Flowchart Styles */
+.roadmap-tree {
+    background: linear-gradient(135deg, #F8FAFC 0%, #F1F5F9 100%) !important;
+    border-radius: 20px !important;
+    border: 2px solid #E2E8F0 !important;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1) !important;
+    max-width: 1200px !important;
+    padding: 3rem 2rem !important;
+}
+
+.tree-node {
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1) !important;
+    transition: all 0.3s ease !important;
+    position: relative !important;
+}
+
+.tree-node:hover {
+    transform: translateY(-2px) !important;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15) !important;
+}
+
+.tree-root {
+    background: linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%) !important;
+    color: #92400E !important;
+    font-weight: 800 !important;
+    font-size: 1.1rem !important;
+    padding: 16px 24px !important;
+    min-width: 200px !important;
+}
+
+.tree-level-1 {
+    background: linear-gradient(135deg, #DBEAFE 0%, #BFDBFE 100%) !important;
+    border: 2px solid #3B82F6 !important;
+    color: #1E40AF !important;
+    min-width: 140px !important;
+}
+
+.tree-level-2 {
+    background: linear-gradient(135deg, #F3F4F6 0%, #E5E7EB 100%) !important;
+    color: #374151 !important;
+    min-width: 120px !important;
+    font-size: 0.85rem !important;
+}
+
+.tree-connector-vertical {
+    width: 3px !important;
+    background: linear-gradient(180deg, #9CA3AF 0%, #6B7280 100%) !important;
+    border-radius: 2px !important;
+}
+
+.tree-connector-horizontal {
+    height: 3px !important;
+    background: linear-gradient(90deg, #9CA3AF 0%, #6B7280 100%) !important;
+    border-radius: 2px !important;
+}
+
+.level-1-container {
+    gap: 2.5rem !important;
+    margin-bottom: 2rem !important;
+}
+
+.level-2-container {
+    gap: 2rem !important;
+    margin-top: 1rem !important;
+}
+
+.child-group {
+    padding: 1rem !important;
+    background: rgba(255, 255, 255, 0.5) !important;
+    border-radius: 12px !important;
+    border: 1px solid rgba(156, 163, 175, 0.2) !important;
+}
+
+.connectors-to-level-2 {
+    gap: 2.5rem !important;
+    margin-bottom: 1rem !important;
+}
+
+.connectors-to-level-2 > .tree-connector-vertical {
+    width: 3px !important;
+    height: 20px !important;
+}
+
+/* Arrow indicators */
+.tree-node::after {
+    content: '' !important;
+    position: absolute !important;
+    bottom: -8px !important;
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+    width: 0 !important;
+    height: 0 !important;
+    border-left: 6px solid transparent !important;
+    border-right: 6px solid transparent !important;
+    border-top: 6px solid #9CA3AF !important;
+}
+
+.tree-root::after,
+.tree-level-2::after {
+    display: none !important;
+}
 
 </style>
 """, unsafe_allow_html=True)

@@ -1,0 +1,101 @@
+/* Enhanced Roadmap Flowchart Styles */
+.roadmap-tree {
+    background: linear-gradient(135deg, #F8FAFC 0%, #F1F5F9 100%) !important;
+    border-radius: 20px !important;
+    border: 2px solid #E2E8F0 !important;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1) !important;
+    max-width: 1200px !important;
+    padding: 3rem 2rem !important;
+}
+
+.tree-node {
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1) !important;
+    transition: all 0.3s ease !important;
+    position: relative !important;
+}
+
+.tree-node:hover {
+    transform: translateY(-2px) !important;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15) !important;
+}
+
+.tree-root {
+    background: linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%) !important;
+    color: #92400E !important;
+    font-weight: 800 !important;
+    font-size: 1.1rem !important;
+    padding: 16px 24px !important;
+    min-width: 200px !important;
+}
+
+.tree-level-1 {
+    background: linear-gradient(135deg, #DBEAFE 0%, #BFDBFE 100%) !important;
+    border: 2px solid #3B82F6 !important;
+    color: #1E40AF !important;
+    min-width: 140px !important;
+}
+
+.tree-level-2 {
+    background: linear-gradient(135deg, #F3F4F6 0%, #E5E7EB 100%) !important;
+    color: #374151 !important;
+    min-width: 120px !important;
+    font-size: 0.85rem !important;
+}
+
+.tree-connector-vertical {
+    width: 3px !important;
+    background: linear-gradient(180deg, #9CA3AF 0%, #6B7280 100%) !important;
+    border-radius: 2px !important;
+}
+
+.tree-connector-horizontal {
+    height: 3px !important;
+    background: linear-gradient(90deg, #9CA3AF 0%, #6B7280 100%) !important;
+    border-radius: 2px !important;
+}
+
+.level-1-container {
+    gap: 2.5rem !important;
+    margin-bottom: 2rem !important;
+}
+
+.level-2-container {
+    gap: 2rem !important;
+    margin-top: 1rem !important;
+}
+
+.child-group {
+    padding: 1rem !important;
+    background: rgba(255, 255, 255, 0.5) !important;
+    border-radius: 12px !important;
+    border: 1px solid rgba(156, 163, 175, 0.2) !important;
+}
+
+.connectors-to-level-2 {
+    gap: 2.5rem !important;
+    margin-bottom: 1rem !important;
+}
+
+.connectors-to-level-2 > .tree-connector-vertical {
+    width: 3px !important;
+    height: 20px !important;
+}
+
+/* Arrow indicators */
+.tree-node::after {
+    content: '' !important;
+    position: absolute !important;
+    bottom: -8px !important;
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+    width: 0 !important;
+    height: 0 !important;
+    border-left: 6px solid transparent !important;
+    border-right: 6px solid transparent !important;
+    border-top: 6px solid #9CA3AF !important;
+}
+
+.tree-root::after,
+.tree-level-2::after {
+    display: none !important;
+}
